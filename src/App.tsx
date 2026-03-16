@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { NavigateFunction, useNavigate } from 'react-router-dom';
-import Container from '@mui/material/Container';
+import Box from '@mui/material/Box';
 import {
   Client, GetQueryRunResponse, GetTagsResponse, RunQueryResponse,
 } from './api/PlaygroundAPI';
@@ -202,7 +202,18 @@ class App extends React.Component<AppProps, State> {
     const formatDisabled = this.state.requestIsRunning || this.isFormatSelectionDisabled();
 
     return (
-      <Container maxWidth="xl">
+      <Box
+        sx={{
+          display: 'flex',
+          flexDirection: 'column',
+          height: '100dvh',
+          width: '100%',
+          maxWidth: '100%',
+          px: { xs: 1, sm: 2, md: 3 },
+          boxSizing: 'border-box',
+          overflow: 'hidden',
+        }}
+      >
         <Header
           tags={this.state.tags}
           selectedVersion={this.state.selectedVersion}
@@ -222,7 +233,7 @@ class App extends React.Component<AppProps, State> {
           requestIsRunning={this.state.requestIsRunning}
           onInputChange={this.handleInputChange}
         />
-      </Container>
+      </Box>
     );
   }
 }
