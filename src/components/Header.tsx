@@ -34,9 +34,9 @@ function Header({
   onRunClick,
 }: HeaderProps) {
   return (
-    <Box sx={{ flexGrow: 2 }}>
+    <Box sx={{ flexShrink: 0 }}>
       <AppBar position="static">
-        <Toolbar>
+        <Toolbar sx={{ flexWrap: 'wrap', gap: 0.5 }}>
           <SelectDropdown
             id="select-clickhouse-version"
             options={tags}

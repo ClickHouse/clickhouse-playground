@@ -77,8 +77,6 @@ function EditorPanel({
 
   return (
     <Box
-      minHeight={isMobile ? '150vh' : '75vh'}
-      height={isMobile ? 'auto' : '75vh'}
       component="div"
       sx={{
         my: 1,
@@ -87,6 +85,8 @@ function EditorPanel({
         display: 'flex',
         overflow: 'hidden',
         flexDirection: 'column',
+        flex: 1,
+        minHeight: 0,
         width: isMobile ? '95%' : '100%',
         maxWidth: isMobile ? '95%' : '100%',
         mx: isMobile ? 'auto' : 0,
@@ -95,10 +95,11 @@ function EditorPanel({
       <PanelGroup
         direction={panelDirection}
         style={{
-          height: isMobile ? 'auto' : '100%',
+          height: '100%',
           width: '100%',
-          minHeight: isMobile ? '150vh' : '75vh',
+          minHeight: 0,
           maxWidth: '100%',
+          flex: 1,
         }}
       >
         <Panel
@@ -108,9 +109,10 @@ function EditorPanel({
             overflow: 'hidden',
             display: 'flex',
             flexDirection: 'column',
-            height: isMobile ? '70vh' : '100%',
-            width: '100%', // Ensure full width
-            maxWidth: '100%', // Prevent overflow
+            height: '100%',
+            minHeight: 0,
+            width: '100%',
+            maxWidth: '100%',
           }}
         >
           <CodeMirror
@@ -156,10 +158,11 @@ function EditorPanel({
             overflow: 'hidden',
             display: 'flex',
             flexDirection: 'column',
-            height: isMobile ? '70vh' : '100%',
-            width: '100%', // Ensure full width
-            maxWidth: '100%', // Prevent overflow
-            position: 'relative', // For absolute positioning of time elapsed
+            height: '100%',
+            minHeight: 0,
+            width: '100%',
+            maxWidth: '100%',
+            position: 'relative',
           }}
         >
           <CodeMirror
