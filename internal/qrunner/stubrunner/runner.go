@@ -3,6 +3,7 @@ package stubrunner
 import (
 	"context"
 
+	"github.com/lodthe/clickhouse-playground/internal/buildtype"
 	"github.com/lodthe/clickhouse-playground/internal/qrunner"
 	"github.com/lodthe/clickhouse-playground/internal/queryrun"
 
@@ -55,4 +56,12 @@ func (r *Runner) Stop(_ context.Context) error {
 
 func (r *Runner) RunQuery(ctx context.Context, run *queryrun.Run) (string, error) {
 	return r.run(ctx, run)
+}
+
+func (r *Runner) EnsureImage(_ context.Context, _ string, bt buildtype.BuildType) (qrunner.ImageStatus, error) {
+	if bt.IsRelease() {
+		return qrunner.ImageStatus{State: qrunner.ImageReady}, nil
+	}
+
+	return qrunner.ImageStatus{}, qrunner.ErrBuildsNotSupported
 }

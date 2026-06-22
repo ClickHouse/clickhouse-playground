@@ -23,6 +23,21 @@ type Config struct {
 	StatusCollectionFrequency time.Duration
 
 	Container ContainerSettings
+
+	// Builds configures local image builds for non-release (debug/sanitizer) build types.
+	Builds BuildSettings
+}
+
+type BuildSettings struct {
+	// Enabled turns on local image builds. When false, non-release builds are rejected.
+	Enabled bool
+
+	// Timeout bounds a single image build. Debug/sanitizer images are large and slow to
+	// download and install, so this should be generous.
+	Timeout time.Duration
+
+	// MaxConcurrent limits the number of concurrent image builds. 0 means unlimited.
+	MaxConcurrent uint
 }
 
 type ContainerSettings struct {
@@ -78,4 +93,13 @@ var DefaultConfig = Config{
 		CPUSet:      "",
 		MemoryLimit: 1 * 1e9,
 	},
+
+	Builds: BuildSettings{
+		Enabled:       false,
+		Timeout:       DefaultBuildTimeout,
+		MaxConcurrent: 1,
+	},
 }
+
+// DefaultBuildTimeout bounds a single local image build.
+const DefaultBuildTimeout = 45 * time.Minute

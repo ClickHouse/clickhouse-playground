@@ -1,7 +1,9 @@
 package dockerengine
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"time"
@@ -12,6 +14,7 @@ import (
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/image"
 	dockercli "github.com/docker/docker/client"
+	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/pkg/errors"
 )
 
@@ -21,10 +24,15 @@ const DefaultDockerTimeout = 5 * time.Minute
 type engineProvider struct {
 	mainCtx context.Context
 	cli     *dockercli.Client
+
+	// buildCli is a separate client used for image builds. Builds stream output for the
+	// whole build duration, so it must not carry the short per-request timeout that cli
+	// uses; build deadlines are enforced via the context instead.
+	buildCli *dockercli.Client
 }
 
 func newProvider(ctx context.Context, daemonURL *string) (*engineProvider, error) {
-	opts, err := getDockerEngineOpts(daemonURL)
+	opts, err := getDockerEngineOpts(daemonURL, DefaultDockerTimeout)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to build options for Docker client")
 	}
@@ -34,16 +42,30 @@ func newProvider(ctx context.Context, daemonURL *string) (*engineProvider, error
 		return nil, errors.Wrap(err, "failed to create Docker client")
 	}
 
+	// A client without an HTTP timeout for long-running image builds.
+	buildOpts, err := getDockerEngineOpts(daemonURL, 0)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to build options for Docker build client")
+	}
+
+	buildCli, err := dockercli.NewClientWithOpts(buildOpts...)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create Docker build client")
+	}
+
 	return &engineProvider{
-		mainCtx: ctx,
-		cli:     cli,
+		mainCtx:  ctx,
+		cli:      cli,
+		buildCli: buildCli,
 	}, nil
 }
 
-func getDockerEngineOpts(daemonURL *string) ([]dockercli.Opt, error) {
+func getDockerEngineOpts(daemonURL *string, timeout time.Duration) ([]dockercli.Opt, error) {
 	opts := []dockercli.Opt{
 		dockercli.WithAPIVersionNegotiation(),
-		dockercli.WithTimeout(DefaultDockerTimeout),
+	}
+	if timeout > 0 {
+		opts = append(opts, dockercli.WithTimeout(timeout))
 	}
 
 	if daemonURL == nil {
@@ -90,6 +112,70 @@ func (p *engineProvider) pullImage(ctx context.Context, imageTag string) (io.Rea
 
 func (p *engineProvider) addImageTag(ctx context.Context, existingImageTag, newImageTag string) error {
 	return p.cli.ImageTag(ctx, existingImageTag, newImageTag)
+}
+
+// buildImage builds an image from the given tar build context and tags it with imageTag.
+// It blocks until the build finishes and returns an error if the build fails. onLine, if not
+// nil, is called with each non-empty output line so callers can report progress.
+func (p *engineProvider) buildImage(ctx context.Context, buildContext io.Reader, imageTag string, buildArgs map[string]*string, onLine func(string)) error {
+	resp, err := p.buildCli.ImageBuild(ctx, buildContext, types.ImageBuildOptions{
+		Tags:        []string{imageTag},
+		Dockerfile:  dockerfileName,
+		BuildArgs:   buildArgs,
+		Remove:      true,
+		ForceRemove: true,
+		// Don't force-pull the base image on every build; it is pulled if missing. Avoids a
+		// per-build round-trip to (anonymous, rate-limited) Docker Hub.
+		PullParent: false,
+	})
+	if err != nil {
+		return errors.Wrap(err, "image build request failed")
+	}
+	defer resp.Body.Close()
+
+	return readBuildOutput(resp.Body, onLine)
+}
+
+// readBuildOutput drains the Docker build output stream and returns an error if the build
+// reported one. The stream is a sequence of JSON messages; each carries either build step
+// output ("stream") or an image-pull status ("status"). onLine receives each non-empty line.
+func readBuildOutput(r io.Reader, onLine func(string)) error {
+	decoder := json.NewDecoder(r)
+	for {
+		var msg struct {
+			Stream      string `json:"stream"`
+			Status      string `json:"status"`
+			Error       string `json:"error"`
+			ErrorDetail struct {
+				Message string `json:"message"`
+			} `json:"errorDetail"`
+		}
+
+		err := decoder.Decode(&msg)
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			return errors.Wrap(err, "failed to read build output")
+		}
+
+		if msg.Error != "" {
+			return errors.New(msg.Error)
+		}
+		if msg.ErrorDetail.Message != "" {
+			return errors.New(msg.ErrorDetail.Message)
+		}
+
+		if onLine != nil {
+			if line := msg.Stream; line != "" {
+				onLine(line)
+			} else if msg.Status != "" {
+				onLine(msg.Status)
+			}
+		}
+	}
+
+	return nil
 }
 
 func (p *engineProvider) getImageByID(ctx context.Context, id string) (image.InspectResponse, error) {
@@ -169,6 +255,27 @@ func (p *engineProvider) exec(ctx context.Context, containerID string, cmd []str
 	}
 
 	return resp, nil
+}
+
+// getContainerStderr returns the container's stderr stream. For non-TTY containers the log
+// stream is multiplexed, so it is demuxed and only the stderr portion is returned. The
+// clickhouse-server process writes sanitizer reports to stderr.
+func (p *engineProvider) getContainerStderr(ctx context.Context, containerID string) (string, error) {
+	reader, err := p.cli.ContainerLogs(ctx, containerID, container.LogsOptions{
+		ShowStdout: false,
+		ShowStderr: true,
+	})
+	if err != nil {
+		return "", errors.Wrap(err, "failed to get container logs")
+	}
+	defer reader.Close()
+
+	var outBuf, errBuf bytes.Buffer
+	if _, err := stdcopy.StdCopy(&outBuf, &errBuf, reader); err != nil {
+		return "", errors.Wrap(err, "failed to demux container logs")
+	}
+
+	return errBuf.String(), nil
 }
 
 func (p *engineProvider) getContainers(ctx context.Context) ([]container.Summary, error) {

@@ -23,6 +23,84 @@ paths:
               schema:
                 $ref: '#/components/schemas/GetImageTagsResponse'
 
+  /build-types:
+    get:
+      summary: Get available build types
+      description: Returns the list of selectable ClickHouse build types (release, debug, sanitizers)
+      operationId: getBuildTypes
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetBuildTypesResponse'
+
+  /images/prepare:
+    post:
+      summary: Prepare a non-release ClickHouse image
+      description: >
+        Triggers an asynchronous local build of a non-release (debug/sanitizer) image for the
+        given version and build type, returning immediately with the current build state.
+        Poll GET /images/status until the state is "ready" before running a query.
+        Release builds always return "ready".
+      operationId: prepareImage
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PrepareImageRequest'
+      responses:
+        '200':
+          description: Current build state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImageStatusResponse'
+        '400':
+          description: Bad request (empty/unknown version or unknown build type)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '501':
+          description: Local builds are not enabled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /images/status:
+    get:
+      summary: Get the build state of a non-release image
+      description: Returns the current build state for a (version, build_type) pair.
+      operationId: getImageStatus
+      parameters:
+        - name: version
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: build_type
+          in: query
+          required: true
+          schema:
+            $ref: '#/components/schemas/BuildType'
+      responses:
+        '200':
+          description: Current build state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImageStatusResponse'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   /runs:
     post:
       summary: Run a ClickHouse SQL query
@@ -73,6 +151,16 @@ paths:
                     error:
                       message: unknown database
                       code: 400
+        '409':
+          description: The requested non-release image has not been built yet
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error:
+                  message: image is not ready, prepare it first
+                  code: 409
         '429':
           description: Too many requests
           content:
@@ -83,6 +171,12 @@ paths:
                 error:
                   message: no available runners
                   code: 429
+        '501':
+          description: A non-release build was requested but local builds are not enabled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   /runs/{id}:
     get:
@@ -164,6 +258,69 @@ components:
       required:
         - result
 
+    BuildType:
+      type: string
+      description: ClickHouse build kind. "release" images come from Docker Hub; the others are built locally from CI artifacts.
+      default: release
+      enum:
+        - release
+        - debug
+        - asan
+        - tsan
+        - msan
+        - ubsan
+
+    GetBuildTypesResponse:
+      type: object
+      properties:
+        result:
+          type: object
+          properties:
+            build_types:
+              type: array
+              items:
+                $ref: '#/components/schemas/BuildType'
+          required:
+            - build_types
+      required:
+        - result
+
+    PrepareImageRequest:
+      type: object
+      properties:
+        version:
+          type: string
+          description: ClickHouse version tag (as returned by GET /tags)
+        build_type:
+          $ref: '#/components/schemas/BuildType'
+      required:
+        - version
+        - build_type
+
+    ImageStatusResponse:
+      type: object
+      properties:
+        result:
+          type: object
+          properties:
+            state:
+              type: string
+              enum:
+                - building
+                - ready
+                - failed
+              description: Current build state of the image
+            detail:
+              type: string
+              description: Human-readable progress stage while building (e.g. "Downloading packages", "Installing packages")
+            error:
+              type: string
+              description: Failure reason when state is "failed"
+          required:
+            - state
+      required:
+        - result
+
     RunQueryRequest:
       type: object
       properties:
@@ -173,6 +330,8 @@ components:
         version:
           type: string
           description: ClickHouse version tag to use
+        build_type:
+          $ref: '#/components/schemas/BuildType'
         database:
           type: string
           description: Database type (defaults to "clickhouse" if not specified)
@@ -231,6 +390,8 @@ components:
             version:
               type: string
               description: ClickHouse version tag used for the query
+            build_type:
+              $ref: '#/components/schemas/BuildType'
             settings:
               type: object
               description: Settings used for the query run

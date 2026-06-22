@@ -1,6 +1,7 @@
 package dockerengine
 
 import (
+	"github.com/lodthe/clickhouse-playground/internal/buildtype"
 	"github.com/lodthe/clickhouse-playground/internal/dbsettings/runsettings"
 )
 
@@ -8,9 +9,10 @@ import (
 type requestState struct {
 	runID string
 
-	database string
-	version  string
-	query    string
+	database  string
+	version   string
+	buildType buildtype.BuildType
+	query     string
 
 	settings runsettings.RunSettings
 

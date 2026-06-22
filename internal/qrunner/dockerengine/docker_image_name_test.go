@@ -1,7 +1,10 @@
 package dockerengine
 
 import (
+	"strings"
 	"testing"
+
+	"github.com/lodthe/clickhouse-playground/internal/buildtype"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -48,4 +51,30 @@ func TestIsPlaygroundImageName(t *testing.T) {
 
 	assert.True(t, IsPlaygroundImageName(chp))
 	assert.False(t, IsPlaygroundImageName(notChp))
+}
+
+func TestPlaygroundBuildImageName(t *testing.T) {
+	urls := []string{"https://x/clickhouse-server_26.3.14.45_amd64.deb"}
+
+	name := PlaygroundBuildImageName(buildtype.ASAN, "26.3.14.45", urls)
+
+	assert.True(t, strings.HasPrefix(name, "chp-build-asan-26.3.14.45:"), name)
+	assert.True(t, IsPlaygroundImageName(name))
+
+	// Deterministic for the same inputs.
+	assert.Equal(t, name, PlaygroundBuildImageName(buildtype.ASAN, "26.3.14.45", urls))
+
+	// Changes when the artifacts change.
+	other := PlaygroundBuildImageName(buildtype.ASAN, "26.3.14.45", []string{"https://x/other.deb"})
+	assert.NotEqual(t, name, other)
+
+	// Tag part is a valid 32-char hex digest.
+	tag := name[strings.LastIndex(name, ":")+1:]
+	assert.Len(t, tag, 32)
+}
+
+func TestSanitizeRef(t *testing.T) {
+	assert.Equal(t, "26.3.14.45", sanitizeRef("26.3.14.45"))
+	assert.Equal(t, "26.3.14.45-debug", sanitizeRef("26.3.14.45+debug"))
+	assert.Equal(t, "abc-def", sanitizeRef("ABC/def"))
 }

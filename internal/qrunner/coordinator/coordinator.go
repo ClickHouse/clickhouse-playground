@@ -6,6 +6,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/lodthe/clickhouse-playground/internal/buildtype"
 	"github.com/lodthe/clickhouse-playground/internal/qrunner"
 	"github.com/lodthe/clickhouse-playground/internal/queryrun"
 
@@ -181,4 +182,62 @@ func (c *Coordinator) RunQuery(ctx context.Context, run *queryrun.Run) (output s
 	}
 
 	return output, err
+}
+
+// EnsureImage fans out to every alive runner and aggregates their statuses. Because a query
+// may be dispatched to any alive runner, the image is only considered ready once all alive
+// runners report it ready. If any runner is still building, the result is building; otherwise
+// the first failure (or error) is returned.
+func (c *Coordinator) EnsureImage(ctx context.Context, version string, bt buildtype.BuildType) (qrunner.ImageStatus, error) {
+	if bt.IsRelease() {
+		return qrunner.ImageStatus{State: qrunner.ImageReady}, nil
+	}
+
+	var (
+		alive    int
+		building *qrunner.ImageStatus
+		failed   *qrunner.ImageStatus
+		firstErr error
+	)
+
+	for _, r := range c.runners {
+		if r.weight == 0 || !r.IsAlive() {
+			continue
+		}
+		alive++
+
+		status, err := r.underlying.EnsureImage(ctx, version, bt)
+		if err != nil {
+			if firstErr == nil {
+				firstErr = err
+			}
+			continue
+		}
+
+		switch status.State {
+		case qrunner.ImageBuilding:
+			s := status
+			building = &s
+		case qrunner.ImageFailed:
+			s := status
+			failed = &s
+		case qrunner.ImageReady:
+		}
+	}
+
+	switch {
+	case alive == 0:
+		if firstErr != nil {
+			return qrunner.ImageStatus{}, firstErr
+		}
+		return qrunner.ImageStatus{}, qrunner.ErrNoAvailableRunners
+	case building != nil:
+		return *building, nil
+	case failed != nil:
+		return *failed, nil
+	case firstErr != nil:
+		return qrunner.ImageStatus{}, firstErr
+	default:
+		return qrunner.ImageStatus{State: qrunner.ImageReady}, nil
+	}
 }

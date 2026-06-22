@@ -52,6 +52,13 @@ func NewClient(log zerolog.Logger, apiURL string, maxRPS int, auth Auth, httpCli
 }
 
 func (c *Client) getAccessToken() (string, error) {
+	// Docker Hub allows anonymous listing of public repositories' tags (with stricter rate
+	// limits). When no credentials are configured, skip token acquisition and fall back to
+	// anonymous access instead of failing.
+	if c.auth.Identifier == "" || c.auth.Secret == "" {
+		return "", nil
+	}
+
 	url := fmt.Sprintf("%s/auth/token", c.apiURL)
 
 	request, err := json.Marshal(c.auth)
@@ -122,7 +129,9 @@ func (c *Client) getTags(url string, token string) (*GetImageTagsResponse, error
 		return nil, fmt.Errorf("failed to create http request: %w", err)
 	}
 
-	req.Header.Set("Authorization", "Bearer "+token)
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
 
 	resp, err := c.cli.Do(req)
 	if err != nil {

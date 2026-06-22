@@ -90,7 +90,7 @@ func TestCustomSettings(t *testing.T) {
 	}
 
 	rcfg := DefaultConfig
-	runner, _ := New(ctx, logger, "Test", rcfg, tagStorage)
+	runner, _ := New(ctx, logger, "Test", rcfg, tagStorage, nil)
 
 	for _, tc := range cases {
 		output, err := runner.RunQuery(ctx, &queryrun.Run{Input: tc.query, Version: tc.version, Database: tc.database, Settings: tc.runSettings})

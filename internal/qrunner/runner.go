@@ -3,6 +3,7 @@ package qrunner
 import (
 	"context"
 
+	"github.com/lodthe/clickhouse-playground/internal/buildtype"
 	"github.com/lodthe/clickhouse-playground/internal/queryrun"
 )
 
@@ -13,6 +14,11 @@ type Runner interface {
 	Status(ctx context.Context) RunnerStatus
 
 	RunQuery(ctx context.Context, run *queryrun.Run) (string, error)
+
+	// EnsureImage makes sure the image for the given version and build type is present,
+	// building it in the background if necessary. It returns the current build status and
+	// is non-blocking. For release builds it always reports ImageReady.
+	EnsureImage(ctx context.Context, version string, bt buildtype.BuildType) (ImageStatus, error)
 
 	// Start initializes background processes (like garbage collection and status exporter).
 	// This function is non-blocking.

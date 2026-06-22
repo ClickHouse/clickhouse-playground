@@ -4,8 +4,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
+	"github.com/lodthe/clickhouse-playground/internal/buildtype"
 	"github.com/lodthe/clickhouse-playground/internal/dbsettings/runsettings"
 	"github.com/lodthe/clickhouse-playground/internal/qrunner"
 	"github.com/lodthe/clickhouse-playground/internal/queryrun"
@@ -45,10 +47,12 @@ func (h *queryHandler) handle(r chi.Router) {
 }
 
 type RunQueryInput struct {
-	Query    string      `json:"query"`
-	Version  string      `json:"version"`
-	Database string      `json:"database"`
-	Settings RunSettings `json:"settings"`
+	Query   string `json:"query"`
+	Version string `json:"version"`
+	// BuildType is the ClickHouse build kind: "release" (default), "debug", "asan", etc.
+	BuildType string      `json:"build_type"`
+	Database  string      `json:"database"`
+	Settings  RunSettings `json:"settings"`
 }
 
 type RunSettings struct {
@@ -104,8 +108,15 @@ func (h *queryHandler) runQuery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	req.Version = strings.TrimSpace(req.Version)
 	if !h.tagStorage.Exists(req.Version) {
-		writeError(w, "unknown version", http.StatusBadRequest)
+		writeError(w, fmt.Sprintf("unknown version: %q", req.Version), http.StatusBadRequest)
+		return
+	}
+
+	bt, err := buildtype.Parse(req.BuildType)
+	if err != nil {
+		writeError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -120,7 +131,7 @@ func (h *queryHandler) runQuery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	run := queryrun.New(req.Query, req.Database, req.Version, runSettings)
+	run := queryrun.New(req.Query, req.Database, req.Version, bt.String(), runSettings)
 
 	startedAt := time.Now()
 	output, err := h.r.RunQuery(r.Context(), run)
@@ -130,6 +141,12 @@ func (h *queryHandler) runQuery(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case errors.Is(err, qrunner.ErrNoAvailableRunners):
 			writeError(w, err.Error(), http.StatusTooManyRequests)
+
+		case errors.Is(err, qrunner.ErrImageNotReady):
+			writeError(w, err.Error(), http.StatusConflict)
+
+		case errors.Is(err, qrunner.ErrBuildsNotSupported):
+			writeError(w, err.Error(), http.StatusNotImplemented)
 
 		default:
 			writeError(w, "internal error", http.StatusInternalServerError)
@@ -173,6 +190,7 @@ type GetQueryRunOutput struct {
 	QueryRunID string                  `json:"query_run_id"`
 	Database   string                  `json:"database,omitempty"`
 	Version    string                  `json:"version"`
+	BuildType  string                  `json:"build_type,omitempty"`
 	Settings   runsettings.RunSettings `json:"settings,omitempty"`
 	Input      string                  `json:"input"`
 	Output     string                  `json:"output"`
@@ -201,6 +219,7 @@ func (h *queryHandler) getQueryRun(w http.ResponseWriter, r *http.Request) {
 		QueryRunID: run.ID,
 		Database:   run.Database,
 		Version:    run.Version,
+		BuildType:  run.BuildType,
 		Settings:   run.Settings,
 		Input:      run.Input,
 		Output:     run.Output,
