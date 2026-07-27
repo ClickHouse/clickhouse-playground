@@ -55,6 +55,7 @@ func (c *Client) getAccessToken() (string, error) {
 	// Docker Hub allows anonymous listing of public repositories' tags (with stricter rate
 	// limits). When no credentials are configured, skip token acquisition and fall back to
 	// anonymous access instead of failing.
+	// TODO: Add an explicit config option for public repositories, which use anonymous access.
 	if c.auth.Identifier == "" || c.auth.Secret == "" {
 		return "", nil
 	}

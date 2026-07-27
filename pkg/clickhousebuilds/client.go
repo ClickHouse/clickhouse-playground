@@ -65,6 +65,7 @@ func NewClient(log zerolog.Logger, cfg Config, httpCli ...*http.Client) *Client 
 		log:           log,
 	}
 
+	// TODO: Move default value substitution to the config layer.
 	if c.reportBaseURL == "" {
 		c.reportBaseURL = DefaultReportBaseURL
 	}

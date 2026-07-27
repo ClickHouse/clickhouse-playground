@@ -200,6 +200,8 @@ func (c *Coordinator) EnsureImage(ctx context.Context, version string, bt buildt
 		firstErr error
 	)
 
+	// TODO: Consider the image ready once any runner has built it; route each
+	// request to a runner where the image is available.
 	for _, r := range c.runners {
 		if r.weight == 0 || !r.IsAlive() {
 			continue

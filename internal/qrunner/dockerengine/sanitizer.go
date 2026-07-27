@@ -34,18 +34,18 @@ func extractSanitizerReport(stderr string) string {
 
 	lines := strings.Split(stderr, "\n")
 
-	start := -1
+	var start *int
 	for i, line := range lines {
 		if containsSanitizerMarker(line) {
-			start = i
+			start = &i
 			break
 		}
 	}
-	if start < 0 {
+	if start == nil {
 		return ""
 	}
 
-	report := lines[start:]
+	report := lines[*start:]
 	if len(report) > maxSanitizerReportLines {
 		report = report[:maxSanitizerReportLines]
 	}

@@ -16,12 +16,12 @@ paths:
       description: Returns a list of available ClickHouse version tags that can be used for running queries
       operationId: getImageTags
       responses:
-        '200':
+        "200":
           description: Successful operation
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/GetImageTagsResponse'
+                $ref: "#/components/schemas/GetImageTagsResponse"
 
   /build-types:
     get:
@@ -29,12 +29,12 @@ paths:
       description: Returns the list of selectable ClickHouse build types (release, debug, sanitizers)
       operationId: getBuildTypes
       responses:
-        '200':
+        "200":
           description: Successful operation
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/GetBuildTypesResponse'
+                $ref: "#/components/schemas/GetBuildTypesResponse"
 
   /images/prepare:
     post:
@@ -50,26 +50,26 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/PrepareImageRequest'
+              $ref: "#/components/schemas/PrepareImageRequest"
       responses:
-        '200':
+        "200":
           description: Current build state
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ImageStatusResponse'
-        '400':
+                $ref: "#/components/schemas/ImageStatusResponse"
+        "400":
           description: Bad request (empty/unknown version or unknown build type)
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '501':
+                $ref: "#/components/schemas/ErrorResponse"
+        "501":
           description: Local builds are not enabled
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse" # TODO: Add examples of errors.
 
   /images/status:
     get:
@@ -86,20 +86,20 @@ paths:
           in: query
           required: true
           schema:
-            $ref: '#/components/schemas/BuildType'
+            $ref: "#/components/schemas/BuildType"
       responses:
-        '200':
+        "200":
           description: Current build state
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ImageStatusResponse'
-        '400':
+                $ref: "#/components/schemas/ImageStatusResponse"
+        "400":
           description: Bad request
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
 
   /runs:
     post:
@@ -111,20 +111,20 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/RunQueryRequest'
+              $ref: "#/components/schemas/RunQueryRequest"
       responses:
-        '200':
+        "200":
           description: Successful operation
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/RunQueryResponse'
-        '400':
+                $ref: "#/components/schemas/RunQueryResponse"
+        "400":
           description: Bad request
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
               examples:
                 emptyQuery:
                   value:
@@ -151,32 +151,32 @@ paths:
                     error:
                       message: unknown database
                       code: 400
-        '409':
+        "409":
           description: The requested non-release image has not been built yet
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
               example:
                 error:
                   message: image is not ready, prepare it first
                   code: 409
-        '429':
+        "429":
           description: Too many requests
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
               example:
                 error:
                   message: no available runners
                   code: 429
-        '501':
+        "501":
           description: A non-release build was requested but local builds are not enabled
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
 
   /runs/{id}:
     get:
@@ -192,28 +192,28 @@ paths:
             type: string
             format: uuid
       responses:
-        '200':
+        "200":
           description: Successful operation
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/GetQueryRunResponse'
-        '400':
+                $ref: "#/components/schemas/GetQueryRunResponse"
+        "400":
           description: Bad request
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
               example:
                 error:
                   message: missed id
                   code: 400
-        '404':
+        "404":
           description: Run not found
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
               example:
                 error:
                   message: run not found
@@ -225,7 +225,7 @@ components:
       type: object
       properties:
         error:
-          $ref: '#/components/schemas/ErrorDetail'
+          $ref: "#/components/schemas/ErrorDetail"
       required:
         - error
 
@@ -279,7 +279,7 @@ components:
             build_types:
               type: array
               items:
-                $ref: '#/components/schemas/BuildType'
+                $ref: "#/components/schemas/BuildType"
           required:
             - build_types
       required:
@@ -287,12 +287,12 @@ components:
 
     PrepareImageRequest:
       type: object
-      properties:
+      properties: # TODO: Add examples of input values.
         version:
           type: string
           description: ClickHouse version tag (as returned by GET /tags)
         build_type:
-          $ref: '#/components/schemas/BuildType'
+          $ref: "#/components/schemas/BuildType"
       required:
         - version
         - build_type
@@ -331,7 +331,7 @@ components:
           type: string
           description: ClickHouse version tag to use
         build_type:
-          $ref: '#/components/schemas/BuildType'
+          $ref: "#/components/schemas/BuildType"
         database:
           type: string
           description: Database type (defaults to "clickhouse" if not specified)
@@ -391,7 +391,7 @@ components:
               type: string
               description: ClickHouse version tag used for the query
             build_type:
-              $ref: '#/components/schemas/BuildType'
+              $ref: "#/components/schemas/BuildType"
             settings:
               type: object
               description: Settings used for the query run

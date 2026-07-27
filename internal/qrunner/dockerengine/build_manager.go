@@ -274,6 +274,7 @@ func (m *buildManager) build(fqn, version string, bt buildtype.BuildType, spec c
 		case m.sem <- struct{}{}:
 			defer func() { <-m.sem }()
 		case <-m.mainCtx.Done():
+			// TODO: One context failure should not fail all concurrent requests for the same FQN.
 			m.finish(fqn, m.mainCtx.Err())
 			return
 		}

@@ -140,10 +140,40 @@ Non-release images are not published to DockerHub, so the server builds them loc
 (minutes), so they are prepared asynchronously: call this endpoint to start the build, then poll
 `GET /api/images/status` until the state is `ready` before running a query.
 
-The request body has `version` (a tag from `/api/tags`) and `build_type`. The response payload
-has `state` (`building`, `ready`, or `failed`), an optional `detail` describing the current
-build stage while building (e.g. `Downloading packages`, `Installing packages`), and an
-optional `error` when failed. `release` always returns `ready`.
+<details>
+      <summary>Response payload</summary>
+      <table>
+          <thead>
+              <tr>
+                  <th>Field name</th>
+                  <th>Field type</th>
+                  <th>Description</th>
+              </tr>
+          </thead>
+          <tbody>
+              <tr>
+                  <td>state</td>
+                  <td>string</td>
+                  <td><code>building</code>, <code>ready</code>, or <code>failed</code>. Release builds always return <code>ready</code>.</td>
+              </tr>
+              <tr>
+                  <td>detail</td>
+                  <td>string</td>
+                  <td>[optional] Current build stage, such as <code>Downloading packages</code>.</td>
+              </tr>
+              <tr>
+                  <td>logs</td>
+                  <td>string</td>
+                  <td>[optional] Build logs, when available.</td>
+              </tr>
+              <tr>
+                  <td>error</td>
+                  <td>string</td>
+                  <td>[optional] Error description when the build has failed.</td>
+              </tr>
+          </tbody>
+      </table>
+  </details>
 
 Example:
 ```yml

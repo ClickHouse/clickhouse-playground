@@ -60,6 +60,7 @@ services:
 
   ui:
     build:
+      # TODO: Move the Web App to this repo.
       context: ../../../clickhouse-playground-ui
       dockerfile: Dockerfile
       args:

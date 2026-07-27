@@ -78,6 +78,7 @@ func (h *imageBuildHandler) getImageStatus(w http.ResponseWriter, r *http.Reques
 // (POST) and status (GET) endpoints: EnsureImage is idempotent and starts a build only when
 // one is needed, so polling it is safe.
 func (h *imageBuildHandler) ensure(w http.ResponseWriter, r *http.Request, version, rawBuildType string) {
+	// TODO: Have a helper function to ensure version existence.
 	version = strings.TrimSpace(version)
 	if version == "" {
 		writeError(w, "version cannot be empty", http.StatusBadRequest)

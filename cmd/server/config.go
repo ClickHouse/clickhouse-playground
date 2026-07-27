@@ -83,6 +83,8 @@ type DockerImage struct {
 type Builds struct {
 	Enabled bool `mapstructure:"enabled"`
 
+	// TODO: Use *string for optional parameters.
+
 	// ReportBaseURL is the S3 location hosting ClickHouse CI (praktika) report JSON files.
 	ReportBaseURL string `mapstructure:"report_base_url"`
 	// GitHubAPIURL is used to resolve a version's git tag to a commit sha.

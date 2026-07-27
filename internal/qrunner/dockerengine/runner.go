@@ -534,7 +534,7 @@ func (r *Runner) collectSanitizerReport(ctx context.Context, state *requestState
 	stderr, err := r.engine.getContainerStderr(ctx, state.containerID)
 	if err != nil {
 		r.logger.Debug().Err(err).Str("run_id", state.runID).Msg("failed to read container stderr for sanitizer report")
-		return ""
+		return "<failed to collect stderr>"
 	}
 
 	return extractSanitizerReport(stderr)

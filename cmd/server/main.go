@@ -83,11 +83,8 @@ func main() {
 		ExpirationTime: config.DockerImage.CacheExpirationTime,
 	}, logger, dockerhubCli)
 
-	// Load tags synchronously first so the API does not reject valid versions during the
-	// initial fetch. Best-effort: on failure the background updater will retry.
-	if err := tagStorage.Update(); err != nil {
-		zlog.Warn().Err(err).Msg("initial docker tag load failed; will retry in background")
-	}
+	// Load tags asynchronously so Docker Hub outages / API changes do not block read endpoints,
+	// which do not require a complete tag list.
 	tagStorage.RunBackgroundUpdate()
 
 	// Build the CI artifact resolver used for local debug/sanitizer image builds.
