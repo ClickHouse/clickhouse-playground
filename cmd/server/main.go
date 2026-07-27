@@ -8,14 +8,17 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/lodthe/clickhouse-playground/internal/cibuild"
 	"github.com/lodthe/clickhouse-playground/internal/dockertag"
 	"github.com/lodthe/clickhouse-playground/internal/qrunner"
 	"github.com/lodthe/clickhouse-playground/internal/qrunner/coordinator"
 	"github.com/lodthe/clickhouse-playground/internal/qrunner/dockerengine"
 	"github.com/lodthe/clickhouse-playground/internal/queryrun"
+	"github.com/lodthe/clickhouse-playground/pkg/clickhousebuilds"
 	"github.com/lodthe/clickhouse-playground/pkg/dockerhub"
 	api "github.com/lodthe/clickhouse-playground/pkg/restapi"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconf "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -67,7 +70,11 @@ func main() {
 	}
 
 	// Initialize storages.
-	dynamodbClient := dynamodb.NewFromConfig(awsConfig)
+	dynamodbClient := dynamodb.NewFromConfig(awsConfig, func(o *dynamodb.Options) {
+		if config.AWS.EndpointURL != "" {
+			o.BaseEndpoint = aws.String(config.AWS.EndpointURL)
+		}
+	})
 	dockerhubCli := dockerhub.NewClient(logger, dockerhub.DockerHubURL, dockerhub.DefaultMaxRPS, dockerhub.Auth(config.DockerImage.Auth))
 	tagStorage := dockertag.NewCache(ctx, dockertag.Config{
 		Repositories:   config.DockerImage.Repositories,
@@ -75,10 +82,16 @@ func main() {
 		Architecture:   config.DockerImage.Architecture,
 		ExpirationTime: config.DockerImage.CacheExpirationTime,
 	}, logger, dockerhubCli)
+
+	// Load tags asynchronously so Docker Hub outages / API changes do not block read endpoints,
+	// which do not require a complete tag list.
 	tagStorage.RunBackgroundUpdate()
 
+	// Build the CI artifact resolver used for local debug/sanitizer image builds.
+	resolver := newBuildResolver(config, logger)
+
 	// Create runners and the coordinator.
-	runners := initializeRunners(ctx, config, tagStorage, logger)
+	runners := initializeRunners(ctx, config, tagStorage, resolver, logger)
 
 	coordinatorCfg := coordinator.Config{
 		HealthChecksEnabled:   true,
@@ -99,6 +112,7 @@ func main() {
 	router := api.NewRouter(api.RouterOpts{
 		Logger:          logger,
 		Runner:          coord,
+		Preparer:        coord,
 		TagStorage:      tagStorage,
 		RunRepo:         runRepo,
 		Timeout:         config.API.ServerTimeout,
@@ -158,7 +172,25 @@ func main() {
 	}
 }
 
-func initializeRunners(ctx context.Context, config *Config, tagStorage *dockertag.Cache, logger zerolog.Logger) []*coordinator.Runner {
+// newBuildResolver constructs the CI artifact resolver used for local image builds.
+// It returns nil when local builds are disabled.
+func newBuildResolver(config *Config, logger zerolog.Logger) cibuild.Resolver {
+	b := config.DockerImage.Builds
+	if !b.Enabled {
+		return nil
+	}
+
+	cli := clickhousebuilds.NewClient(logger, clickhousebuilds.Config{
+		ReportBaseURL: b.ReportBaseURL,
+		GitHubAPIURL:  b.GitHubAPIURL,
+		Repository:    b.Repository,
+		GitHubToken:   b.GitHubToken,
+	})
+
+	return cibuild.NewResolver(logger, cli, cibuild.Config{CacheTTL: b.ResolveCacheTTL})
+}
+
+func initializeRunners(ctx context.Context, config *Config, tagStorage *dockertag.Cache, resolver cibuild.Resolver, logger zerolog.Logger) []*coordinator.Runner {
 	var runners []*coordinator.Runner
 	for _, r := range config.Runners {
 		var runner qrunner.Runner
@@ -195,8 +227,15 @@ func initializeRunners(ctx context.Context, config *Config, tagStorage *dockerta
 				rcfg.MaxWarmContainers = *r.DockerEngine.Prewarm.MaxWarmContainers
 			}
 
+			builds := config.DockerImage.Builds
+			rcfg.Builds = dockerengine.BuildSettings{
+				Enabled:       builds.Enabled,
+				Timeout:       builds.Timeout,
+				MaxConcurrent: builds.MaxConcurrent,
+			}
+
 			var err error
-			runner, err = dockerengine.New(ctx, logger, r.Name, rcfg, tagStorage)
+			runner, err = dockerengine.New(ctx, logger, r.Name, rcfg, tagStorage, resolver)
 			if err != nil {
 				zlog.Fatal().Err(err).Msg("failed to create docker engine runner")
 			}

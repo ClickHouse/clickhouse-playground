@@ -78,7 +78,7 @@ func (c *Cache) backgroundUpdate() {
 }
 
 func (c *Cache) normalizeTag(tag string) string {
-	return strings.ToLower(tag)
+	return strings.ToLower(strings.TrimSpace(tag))
 }
 
 // GetAll returns all known tags for the given image.
@@ -139,11 +139,22 @@ func (c *Cache) asyncUpdate() {
 		atomic.StoreInt32(&c.updating, 0)
 	}()
 
+	_ = c.fetchAndStore()
+}
+
+// Update synchronously fetches the image list and refreshes the cache. It is intended for a
+// blocking initial load at startup so the server does not reject valid versions while the
+// first background fetch is still in flight.
+func (c *Cache) Update() error {
+	return c.fetchAndStore()
+}
+
+func (c *Cache) fetchAndStore() error {
 	startedAt := time.Now()
 
 	images, imgByTag, err := c.getImagesFromSeveralRepositories(c.config.Repositories)
 	if err != nil {
-		return
+		return err
 	}
 
 	func() {
@@ -156,6 +167,8 @@ func (c *Cache) asyncUpdate() {
 	}()
 
 	c.logger.Debug().Dur("elapsed", time.Since(startedAt)).Int("tag_count", len(imgByTag)).Msg("docker image cache has been updated")
+
+	return nil
 }
 
 // getImagesFromSeveralRepositories fetches images from the given list of repositories.

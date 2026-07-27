@@ -74,6 +74,32 @@ type DockerImage struct {
 	OS                  string        `mapstructure:"os"`
 	Architecture        string        `mapstructure:"architecture"`
 	CacheExpirationTime time.Duration `mapstructure:"image_tags_cache_expiration_time"`
+
+	Builds Builds `mapstructure:"builds"`
+}
+
+// Builds configures local image builds for non-release (debug/sanitizer) build types.
+// When disabled, only release builds (pulled from Docker Hub) are available.
+type Builds struct {
+	Enabled bool `mapstructure:"enabled"`
+
+	// TODO: Use *string for optional parameters.
+
+	// ReportBaseURL is the S3 location hosting ClickHouse CI (praktika) report JSON files.
+	ReportBaseURL string `mapstructure:"report_base_url"`
+	// GitHubAPIURL is used to resolve a version's git tag to a commit sha.
+	GitHubAPIURL string `mapstructure:"github_api_url"`
+	// Repository is the ClickHouse GitHub repository ("owner/name").
+	Repository string `mapstructure:"repository"`
+	// GitHubToken is optional; it raises the GitHub API rate limit when set.
+	GitHubToken string `mapstructure:"github_token"`
+
+	// ResolveCacheTTL bounds how long resolved artifact URLs are cached.
+	ResolveCacheTTL time.Duration `mapstructure:"resolve_cache_ttl"`
+	// Timeout bounds a single image build.
+	Timeout time.Duration `mapstructure:"timeout"`
+	// MaxConcurrent limits concurrent image builds. 0 means unlimited.
+	MaxConcurrent uint `mapstructure:"max_concurrent"`
 }
 
 type API struct {
@@ -86,6 +112,10 @@ type AWS struct {
 	AccessKeyID     string `mapstructure:"access_key_id"`
 	SecretAccessKey string `mapstructure:"secret_access_key"`
 	Region          string `mapstructure:"region"`
+
+	// EndpointURL overrides the DynamoDB endpoint. Leave empty for real AWS; set it to point
+	// at a local DynamoDB (e.g. http://dynamodb-local:8000) for development.
+	EndpointURL string `mapstructure:"endpoint_url"`
 
 	QueryRunsTableName string `mapstructure:"query_runs_table"`
 }
@@ -227,11 +257,14 @@ func (c *Config) validate() error {
 		return fmt.Errorf("invalid log format (available: %s, %s)", JSONLogFormat, PrettyLogFormat)
 	}
 
-	if c.DockerImage.Auth.Identifier == "" {
-		return errors.New("docker_image.auth.identifier is required, see https://docs.docker.com/reference/api/hub/latest/#tag/authentication-api/operation/AuthCreateAccessToken")
+	// Docker Hub credentials are optional: when omitted, tags are listed anonymously (with
+	// stricter rate limits). Provide them to raise the rate limit, see
+	// https://docs.docker.com/reference/api/hub/latest/#tag/authentication-api/operation/AuthCreateAccessToken
+	if (c.DockerImage.Auth.Identifier == "") != (c.DockerImage.Auth.Secret == "") {
+		return errors.New("docker_image.auth.identifier and docker_image.auth.secret must be set together")
 	}
-	if c.DockerImage.Auth.Secret == "" {
-		return errors.New("docker_image.auth.secret is required, see https://docs.docker.com/reference/api/hub/latest/#tag/authentication-api/operation/AuthCreateAccessToken")
+	if c.DockerImage.Auth.Identifier == "" {
+		zlog.Warn().Msg("docker_image.auth is empty; listing Docker Hub tags anonymously (rate limited)")
 	}
 	if len(c.DockerImage.Repositories) == 0 {
 		return errors.New("docker_image.repositories must be non-empty")

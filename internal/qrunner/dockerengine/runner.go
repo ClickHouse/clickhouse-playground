@@ -9,6 +9,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/lodthe/clickhouse-playground/internal/buildtype"
+	"github.com/lodthe/clickhouse-playground/internal/cibuild"
 	"github.com/lodthe/clickhouse-playground/internal/dbsettings"
 	"github.com/lodthe/clickhouse-playground/internal/dbsettings/runsettings"
 	"github.com/lodthe/clickhouse-playground/internal/dockertag"
@@ -44,6 +46,7 @@ type Runner struct {
 
 	engine       *engineProvider
 	tagStorage   ImageStorage
+	builder      *buildManager
 	pipelineMetr *metrics.PipelineExporter
 
 	workers   sync.WaitGroup
@@ -52,7 +55,9 @@ type Runner struct {
 	prewarmer *prewarmer
 }
 
-func New(ctx context.Context, logger zerolog.Logger, name string, cfg Config, tagStorage ImageStorage) (*Runner, error) {
+// New creates a Docker Engine runner. resolver may be nil when local builds are disabled;
+// in that case only release (Docker Hub) builds are supported.
+func New(ctx context.Context, logger zerolog.Logger, name string, cfg Config, tagStorage ImageStorage, resolver cibuild.Resolver) (*Runner, error) {
 	engine, err := newProvider(ctx, cfg.DaemonURL)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create Docker engine provider")
@@ -70,6 +75,7 @@ func New(ctx context.Context, logger zerolog.Logger, name string, cfg Config, ta
 		cfg:          cfg,
 		engine:       engine,
 		tagStorage:   tagStorage,
+		builder:      newBuildManager(ctx, logger, engine, resolver, cfg.Builds),
 		pipelineMetr: metrics.NewPipelineExporter(string(qrunner.TypeDockerEngine), name),
 	}
 
@@ -142,15 +148,21 @@ func (r *Runner) Stop(shutdownCtx context.Context) error {
 }
 
 func (r *Runner) RunQuery(ctx context.Context, run *queryrun.Run) (output string, err error) {
-	state := &requestState{
-		runID:    run.ID,
-		database: run.Database,
-		version:  run.Version,
-		query:    run.Input,
-		settings: run.Settings,
+	bt, err := buildtype.Parse(run.BuildType)
+	if err != nil {
+		return "", err
 	}
 
-	state.imageTag, state.imageFQN, err = r.constructImageFQN(state.version)
+	state := &requestState{
+		runID:     run.ID,
+		database:  run.Database,
+		version:   run.Version,
+		buildType: bt,
+		query:     run.Input,
+		settings:  run.Settings,
+	}
+
+	state.imageTag, state.imageFQN, err = r.resolveImage(ctx, state.version, state.buildType)
 	if err != nil {
 		return "", fmt.Errorf("failed to construct FQN: %w", err)
 	}
@@ -201,13 +213,28 @@ func (r *Runner) RunQuery(ctx context.Context, run *queryrun.Run) (output string
 	return output, nil
 }
 
-// constructImageFQN builds image tag and FQN from version.
-// If there is no such a version, an error is returned.
+// resolveImage builds the image tag and FQN for a (version, build type) pair.
 //
-// Otherwise, an image is fetched and the following names are built:
-// - image tag: image name in format <repository>:<version>
-// - image FQN: a unique fully qualified name that includes the exact version of the image
-func (r *Runner) constructImageFQN(version string) (imageTag string, imageFQN string, err error) {
+// For release builds the image comes from Docker Hub:
+//   - image tag: image name in format <repository>:<version>
+//   - image FQN: a unique fully qualified name that includes the exact version of the image
+//
+// For non-release builds the image is built locally; the tag is empty and the FQN is a
+// content-addressed name derived from the resolved CI artifacts.
+func (r *Runner) resolveImage(ctx context.Context, version string, bt buildtype.BuildType) (imageTag string, imageFQN string, err error) {
+	if !bt.IsRelease() {
+		if !r.builder.enabled() {
+			return "", "", qrunner.ErrBuildsNotSupported
+		}
+
+		fqn, _, err := r.builder.resolve(ctx, version, bt)
+		if err != nil {
+			return "", "", err
+		}
+
+		return "", fqn, nil
+	}
+
 	img, found := r.tagStorage.Find(version)
 	if !found {
 		return "", "", errors.New("version not found")
@@ -219,27 +246,43 @@ func (r *Runner) constructImageFQN(version string) (imageTag string, imageFQN st
 	return imageTag, imageFQN, nil
 }
 
-// createContainer pulls image if necessary and runs a container with a database.
+// createContainer makes sure the image is present and runs a container with a database.
+// Release images are pulled on demand; non-release images must have been built beforehand
+// via EnsureImage (the prepare flow), otherwise ErrImageNotReady is returned.
 func (r *Runner) createContainer(ctx context.Context, state *requestState) error {
-	if state.imageFQN == "" || state.imageTag == "" {
+	if state.imageFQN == "" {
 		var err error
-		state.imageTag, state.imageFQN, err = r.constructImageFQN(state.version)
+		state.imageTag, state.imageFQN, err = r.resolveImage(ctx, state.version, state.buildType)
 		if err != nil {
 			return fmt.Errorf("failed to construct FQN: %w", err)
 		}
 	}
 
-	err := r.pull(ctx, state)
-	if err != nil {
-		return fmt.Errorf("pull failed: %w", err)
+	if state.buildType.IsRelease() {
+		err := r.pull(ctx, state)
+		if err != nil {
+			return fmt.Errorf("pull failed: %w", err)
+		}
+	} else if !r.checkIfImageExists(ctx, state) {
+		return qrunner.ErrImageNotReady
 	}
 
-	err = r.runContainer(ctx, state)
+	err := r.runContainer(ctx, state)
 	if err != nil {
 		return fmt.Errorf("container run failed: %w", err)
 	}
 
 	return err
+}
+
+// EnsureImage makes sure the image for the given version and build type is built and cached.
+func (r *Runner) EnsureImage(ctx context.Context, version string, bt buildtype.BuildType) (qrunner.ImageStatus, error) {
+	if bt.IsRelease() {
+		// Release images are pulled on demand inside RunQuery.
+		return qrunner.ImageStatus{State: qrunner.ImageReady}, nil
+	}
+
+	return r.builder.Ensure(ctx, version, bt)
 }
 
 // pull checks whether the requested image exists. If no, it will be downloaded and renamed to hashed-name.
@@ -467,9 +510,32 @@ func (r *Runner) runQueryWithContainer(ctx context.Context, state *requestState)
 		time.Sleep(r.cfg.ExecRetryDelay)
 	}
 
-	if stderr == "" {
-		return stdout, nil
+	output = stdout
+	if stderr != "" {
+		output = stdout + "\n" + stderr
 	}
 
-	return stdout + "\n" + stderr, nil
+	// Sanitizer/debug builds print sanitizer reports (data races, use-after-free, UB, ...) to
+	// the server's stderr, which the client never sees. Capture it and forward it to the user.
+	if !state.buildType.IsRelease() {
+		if report := r.collectSanitizerReport(ctx, state); report != "" {
+			if output != "" {
+				output += "\n\n"
+			}
+			output += report
+		}
+	}
+
+	return output, nil
+}
+
+// collectSanitizerReport reads the container's stderr and returns any sanitizer report found.
+func (r *Runner) collectSanitizerReport(ctx context.Context, state *requestState) string {
+	stderr, err := r.engine.getContainerStderr(ctx, state.containerID)
+	if err != nil {
+		r.logger.Debug().Err(err).Str("run_id", state.runID).Msg("failed to read container stderr for sanitizer report")
+		return "<failed to collect stderr>"
+	}
+
+	return extractSanitizerReport(stderr)
 }

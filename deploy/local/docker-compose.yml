@@ -1,0 +1,75 @@
+# Local, credential-free stack for checking the debug/sanitizer build-variant feature.
+#
+#   docker compose -f deploy/local/docker-compose.yml up --build
+#
+# Then open http://localhost:3001 (UI). The backend API is on http://localhost:9000/api.
+# Runs are stored in an in-memory DynamoDB; Docker Hub tags are listed anonymously.
+#
+# The backend builds debug/sanitizer images on the host Docker daemon (via the mounted
+# docker.sock) and needs outbound internet to pull ubuntu:22.04 and the CI .deb packages.
+
+services:
+  dynamodb-local:
+    image: amazon/dynamodb-local:latest
+    command: ["-jar", "DynamoDBLocal.jar", "-inMemory", "-sharedDb"]
+    expose:
+      - "8000"
+
+  ddb-init:
+    image: amazon/aws-cli:latest
+    depends_on:
+      - dynamodb-local
+    environment:
+      AWS_ACCESS_KEY_ID: dummy
+      AWS_SECRET_ACCESS_KEY: dummy
+      AWS_REGION: us-east-2
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >
+        until aws dynamodb list-tables --endpoint-url http://dynamodb-local:8000 >/dev/null 2>&1; do
+          echo "waiting for dynamodb-local..."; sleep 2;
+        done;
+        aws dynamodb describe-table --table-name QueryRuns --endpoint-url http://dynamodb-local:8000 >/dev/null 2>&1 ||
+        aws dynamodb create-table --table-name QueryRuns
+        --attribute-definitions AttributeName=Id,AttributeType=S
+        --key-schema AttributeName=Id,KeyType=HASH
+        --billing-mode PAY_PER_REQUEST
+        --endpoint-url http://dynamodb-local:8000;
+        echo "dynamodb ready";
+    restart: "no"
+
+  backend:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    environment:
+      CONFIG_PATH: /config.yml
+      AWS_ENDPOINT_URL_DYNAMODB: http://dynamodb-local:8000
+      AWS_REGION: us-east-2
+      AWS_ACCESS_KEY_ID: dummy
+      AWS_SECRET_ACCESS_KEY: dummy
+    volumes:
+      - ./config.yml:/config.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+      - "9000:9000"
+    depends_on:
+      ddb-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  ui:
+    build:
+      # TODO: Move the Web App to this repo.
+      context: ../../../clickhouse-playground-ui
+      dockerfile: Dockerfile
+      args:
+        # Same-origin: the UI fetches /api/* and nginx (below) proxies to the backend.
+        API_URL: /api/
+    volumes:
+      - ./nginx.ui.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "3001:80"
+    depends_on:
+      - backend
+    restart: unless-stopped

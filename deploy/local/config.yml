@@ -1,0 +1,71 @@
+# Local-deploy backend config for checking the debug/sanitizer build-variant feature.
+# Listed Docker Hub tags are fetched anonymously (no auth), runs are stored in a local
+# DynamoDB, and local builds for non-release build types are enabled.
+log_level: info
+
+docker_image:
+  auth:
+    identifier: ""
+    secret: ""
+  repositories:
+    - clickhouse/clickhouse-server
+
+  os: linux
+  architecture: amd64
+
+  image_tags_cache_expiration_time: 3m
+
+  # Enable local debug/sanitizer image builds.
+  builds:
+    enabled: true
+    report_base_url: https://s3.amazonaws.com/clickhouse-test-reports
+    github_api_url: https://api.github.com
+    repository: ClickHouse/ClickHouse
+    resolve_cache_ttl: 30m
+    timeout: 45m
+    # Build several variant images in parallel so they don't queue behind each other.
+    max_concurrent: 4
+
+api:
+  address: :9000
+  server_timeout: 60s
+  cache_disabled: false
+
+limits:
+  max_query_length: 2500
+  max_output_length: 25000
+
+prometheus_address: :2112
+
+# DynamoDB credentials are dummy; the endpoint is overridden to the local DynamoDB via the
+# AWS_ENDPOINT_URL_DYNAMODB environment variable (see docker-compose.yml).
+aws:
+  access_key_id: dummy
+  secret_access_key: dummy
+  region: us-east-2
+  endpoint_url: http://dynamodb-local:8000
+  query_runs_table: QueryRuns
+
+coordinator:
+  health_check_retry_delay: 10s
+
+runners:
+  - type: DOCKER_ENGINE
+    name: default
+    max_concurrency: 10
+    weight: 100
+
+    docker_engine:
+      gc:
+        trigger_frequency: 1m
+        container_ttl: 5m
+        image_count_threshold: 50
+        image_buffer_size: 30
+
+      container:
+        cpu_limit: 2.5
+        # Sanitizer builds (asan/tsan/msan) use 2-4x the memory of release; give them headroom.
+        memory_limit_mb: 8000
+
+      prewarm:
+        max_warm_containers: 2

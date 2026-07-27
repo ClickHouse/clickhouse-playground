@@ -133,11 +133,12 @@ func (p *prewarmer) extractNextRequest() (request requestState, count int) {
 
 func (p *prewarmer) runContainer(request *requestState) error {
 	state := requestState{
-		runID:    "PREWARMING",
-		query:    " ",
-		version:  request.version,
-		imageTag: request.imageTag,
-		imageFQN: request.imageFQN,
+		runID:     "PREWARMING",
+		query:     " ",
+		version:   request.version,
+		buildType: request.buildType,
+		imageTag:  request.imageTag,
+		imageFQN:  request.imageFQN,
 	}
 	err := p.runner.createContainer(p.ctx, &state)
 	if err != nil {

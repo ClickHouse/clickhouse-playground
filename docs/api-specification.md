@@ -109,6 +109,88 @@ curl -XGET https://fiddle.clickhouse.com/api/tags
 }
 ```
 
+### List available build types
+
+| GET    | /api/build-types |
+|--------|------------------|
+
+Get the selectable ClickHouse build types. `release` images are pulled from DockerHub; the
+other build types (`debug`, `asan`, `tsan`, `msan`, `ubsan`) are built locally on demand from
+ClickHouse CI artifacts and are only available when local builds are enabled on the server.
+
+Example:
+```yml
+curl -XGET https://fiddle.clickhouse.com/api/build-types
+
+# 200 OK
+{
+  "result": {
+    "build_types": ["release", "debug", "asan", "tsan", "msan", "ubsan"]
+  }
+}
+```
+
+### Prepare a non-release build
+
+| POST   | /api/images/prepare |
+|--------|---------------------|
+
+Non-release images are not published to DockerHub, so the server builds them locally from the
+`.deb` packages produced by ClickHouse CI on release branches. These builds are large and slow
+(minutes), so they are prepared asynchronously: call this endpoint to start the build, then poll
+`GET /api/images/status` until the state is `ready` before running a query.
+
+<details>
+      <summary>Response payload</summary>
+      <table>
+          <thead>
+              <tr>
+                  <th>Field name</th>
+                  <th>Field type</th>
+                  <th>Description</th>
+              </tr>
+          </thead>
+          <tbody>
+              <tr>
+                  <td>state</td>
+                  <td>string</td>
+                  <td><code>building</code>, <code>ready</code>, or <code>failed</code>. Release builds always return <code>ready</code>.</td>
+              </tr>
+              <tr>
+                  <td>detail</td>
+                  <td>string</td>
+                  <td>[optional] Current build stage, such as <code>Downloading packages</code>.</td>
+              </tr>
+              <tr>
+                  <td>logs</td>
+                  <td>string</td>
+                  <td>[optional] Build logs, when available.</td>
+              </tr>
+              <tr>
+                  <td>error</td>
+                  <td>string</td>
+                  <td>[optional] Error description when the build has failed.</td>
+              </tr>
+          </tbody>
+      </table>
+  </details>
+
+Example:
+```yml
+curl -XPOST https://fiddle.clickhouse.com/api/images/prepare -d '{ \
+  "version": "24.8.1.2684", \
+  "build_type": "asan" \
+}'
+
+# 200 OK
+{ "result": { "state": "building" } }
+
+# Poll until ready:
+curl -XGET 'https://fiddle.clickhouse.com/api/images/status?version=24.8.1.2684&build_type=asan'
+# 200 OK
+{ "result": { "state": "ready" } }
+```
+
 ### Run a query
 
 | POST   | /api/runs |
@@ -135,9 +217,19 @@ for an incoming request, so it may some time to process the query
                 <td>A desired version of ClickHouse where the query will be run.</td>
             </tr>
             <tr>
-                <td rowspan=1>input</td>
+                <td rowspan=1>query</td>
                 <td rowspan=1>string</td>
                 <td>Semicolon-separated list of SQL queries that will be run.</td>
+            </tr>
+            <tr>
+                <td rowspan=1>build_type</td>
+                <td rowspan=1>string</td>
+                <td>
+                    [optional] ClickHouse build kind: <code>release</code> (default), <code>debug</code>,
+                    <code>asan</code>, <code>tsan</code>, <code>msan</code>, <code>ubsan</code>.
+                    Non-release builds must be prepared first (see <em>Prepare a non-release build</em>);
+                    otherwise the request fails with <code>409</code>.
+                </td>
             </tr>
         </tbody>
     </table>
@@ -236,6 +328,11 @@ You can get information about a previously processed query.
                 <td rowspan=1>version</td>
                 <td rowspan=1>string</td>
                 <td>What ClickHouse version has been used to run the query.</td>
+            </tr>
+            <tr>
+                <td rowspan=1>build_type</td>
+                <td rowspan=1>string</td>
+                <td>Which build type was used (omitted for release builds).</td>
             </tr>
             <tr>
                 <td>input</td>

@@ -18,6 +18,7 @@ import (
 type RouterOpts struct {
 	Logger     zerolog.Logger
 	Runner     QueryRunner
+	Preparer   ImagePreparer
 	TagStorage TagStorage
 	RunRepo    queryrun.Repository
 
@@ -58,6 +59,7 @@ func NewRouter(opts RouterOpts) http.Handler {
 	r.Route("/api", func(r chi.Router) {
 		newQueryHandler(opts.Runner, opts.RunRepo, opts.TagStorage, opts.MaxQueryLength, opts.MaxOutputLength).handle(r)
 		newImageTagHandler(opts.TagStorage).handle(r)
+		newImageBuildHandler(opts.Preparer, opts.TagStorage).handle(r)
 	})
 
 	return r
