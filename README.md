@@ -28,9 +28,9 @@ npm start
 Build a Docker image:
 ```bash
 # Address of the backend API
-export API_URL='https://your.domain.com/api/'
+export API_URL='https://fiddle.clickhouse.com/api/'
 
-docker build --build-arg API_URL="$API_URL" -t lodthe/clickhouse-playground-ui
+docker build --build-arg API_URL="$API_URL" -t lodthe/clickhouse-playground-ui .
 ```
 
 Run a container based on the built image:

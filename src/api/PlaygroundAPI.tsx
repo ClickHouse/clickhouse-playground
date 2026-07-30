@@ -104,9 +104,16 @@ export class Client {
   }
 
   public getImageStatus(version: string, buildType: string): Promise<ImageStatusResponse> {
-    const params = new URLSearchParams({ version, build_type: buildType });
+    // The status response changes while an image is building. Use a unique URL as
+    // well as the browser cache directive so intermediary caches cannot serve a
+    // previous poll result.
+    const params = new URLSearchParams({
+      version,
+      build_type: buildType,
+      _cache_bust: Date.now().toString(),
+    });
 
-    return fetch(`${this.apiBaseUrl}images/status?${params.toString()}`)
+    return fetch(`${this.apiBaseUrl}images/status?${params.toString()}`, { cache: 'no-store' })
       .then((response) => response.json())
       .then((response) => {
         if (response.result) {
