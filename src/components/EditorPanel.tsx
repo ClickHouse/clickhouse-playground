@@ -1,6 +1,6 @@
 import * as React from 'react';
-import { useEffect } from 'react';
-import CodeMirror from '@uiw/react-codemirror';
+import { useEffect, useRef } from 'react';
+import CodeMirror, { ReactCodeMirrorRef } from '@uiw/react-codemirror';
 import { sql } from '@codemirror/lang-sql';
 import { EditorView } from '@codemirror/view';
 import { autocompletion } from '@codemirror/autocomplete';
@@ -19,6 +19,7 @@ interface EditorPanelProps {
   output: string;
   timeElapsed?: string;
   requestIsRunning: boolean;
+  followOutput: boolean;
   onInputChange: (value: string) => void;
 }
 
@@ -27,12 +28,25 @@ function EditorPanel({
   output,
   timeElapsed,
   requestIsRunning,
+  followOutput,
   onInputChange,
 }: EditorPanelProps) {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
   const panelDirection = isMobile ? 'vertical' : 'horizontal';
+
+  // While streaming build logs, keep the output scrolled to the latest line.
+  const outputRef = useRef<ReactCodeMirrorRef>(null);
+  useEffect(() => {
+    if (!followOutput) {
+      return;
+    }
+    const { view } = outputRef.current ?? {};
+    if (view) {
+      view.scrollDOM.scrollTop = view.scrollDOM.scrollHeight;
+    }
+  }, [output, followOutput]);
 
   useEffect(() => {
     const style = document.createElement('style');
@@ -166,6 +180,7 @@ function EditorPanel({
           }}
         >
           <CodeMirror
+            ref={outputRef}
             theme={xcodeLight}
             value={output}
             basicSetup={{

@@ -2,7 +2,13 @@ import * as React from 'react';
 import { NavigateFunction, useNavigate } from 'react-router-dom';
 import Box from '@mui/material/Box';
 import {
-  Client, GetQueryRunResponse, GetTagsResponse, RunQueryResponse,
+  Client,
+  GetBuildTypesResponse,
+  GetQueryRunResponse,
+  GetTagsResponse,
+  ImageStatusResponse,
+  RunQueryResponse,
+  RELEASE_BUILD_TYPE,
 } from './api/PlaygroundAPI';
 import Header from './components/Header';
 import EditorPanel from './components/EditorPanel';
@@ -20,14 +26,26 @@ const apiUrl = process.env.REACT_APP_API_URL;
 const githubRepoUrl = 'https://github.com/lodthe/clickhouse-playground';
 
 const localStorageFormatKey = 'clickhouse-playground-format';
+const localStorageBuildTypeKey = 'clickhouse-playground-build-type';
+
+// How often the image build status is polled while a non-release image is being built.
+const buildPollIntervalMs = 2000;
+
+const sleep = (ms: number): Promise<void> => new Promise((resolve) => {
+  window.setTimeout(resolve, ms);
+});
 
 type State = {
   tags: string[];
+  buildTypes: string[];
   selectedVersion: string;
+  selectedBuildType: string;
   selectedFormat: string;
   input: string;
   initialInput: string;
   requestIsRunning: boolean;
+  buildStatus: string;
+  buildElapsedSec: number;
   output: string;
   timeElapsed?: string;
 };
@@ -41,6 +59,11 @@ class App extends React.Component<AppProps, State> {
 
   navigate: NavigateFunction;
 
+  // Ticking timer that shows how long the current image build has been running.
+  buildTimer?: ReturnType<typeof setInterval>;
+
+  buildStartMs = 0;
+
   constructor(props: AppProps) {
     super(props);
     this.navigate = props.navigate;
@@ -48,11 +71,15 @@ class App extends React.Component<AppProps, State> {
 
     this.state = {
       tags: ['latest'],
+      buildTypes: [RELEASE_BUILD_TYPE],
       selectedVersion: 'latest',
+      selectedBuildType: localStorage.getItem(localStorageBuildTypeKey) || RELEASE_BUILD_TYPE,
       selectedFormat: localStorage.getItem(localStorageFormatKey) || 'TabSeparated',
       input: '',
       initialInput: '',
       requestIsRunning: false,
+      buildStatus: '',
+      buildElapsedSec: 0,
       output: '',
       timeElapsed: undefined,
     };
@@ -94,7 +121,46 @@ class App extends React.Component<AppProps, State> {
       .catch((error) => {
         console.log(error);
       });
+
+    this.client
+      .getBuildTypes()
+      .then((result: GetBuildTypesResponse) => {
+        const buildTypes = result.buildTypes && result.buildTypes.length > 0
+          ? result.buildTypes
+          : [RELEASE_BUILD_TYPE];
+
+        this.setState((prev) => ({
+          buildTypes,
+          // Reset to release if the persisted build type is no longer offered.
+          selectedBuildType: buildTypes.includes(prev.selectedBuildType)
+            ? prev.selectedBuildType
+            : RELEASE_BUILD_TYPE,
+        }));
+      })
+      .catch((error) => {
+        console.log(error);
+      });
   }
+
+  componentWillUnmount() {
+    this.stopBuildTimer();
+  }
+
+  private startBuildTimer = () => {
+    this.buildStartMs = Date.now();
+    this.stopBuildTimer();
+    this.setState({ buildElapsedSec: 0 });
+    this.buildTimer = setInterval(() => {
+      this.setState({ buildElapsedSec: Math.floor((Date.now() - this.buildStartMs) / 1000) });
+    }, 1000);
+  };
+
+  private stopBuildTimer = () => {
+    if (this.buildTimer !== undefined) {
+      clearInterval(this.buildTimer);
+      this.buildTimer = undefined;
+    }
+  };
 
   private handleInputChange = (value: string) => {
     this.setState({
@@ -105,6 +171,13 @@ class App extends React.Component<AppProps, State> {
   private handleSelectedVersionChange = (newValue: string) => {
     this.setState({
       selectedVersion: newValue,
+    });
+  };
+
+  private handleSelectedBuildTypeChange = (newValue: string) => {
+    localStorage.setItem(localStorageBuildTypeKey, newValue);
+    this.setState({
+      selectedBuildType: newValue,
     });
   };
 
@@ -135,6 +208,7 @@ class App extends React.Component<AppProps, State> {
           initialInput: result.input,
           output: result.output,
           selectedVersion: result.version,
+          selectedBuildType: result.buildType,
         });
       })
       .catch((error) => {
@@ -149,37 +223,104 @@ class App extends React.Component<AppProps, State> {
       }));
   };
 
-  private runQuery = () => {
+  // ensureImageReady prepares a non-release image and polls until it is built.
+  // It returns true once the image is ready, or false (after setting an error output)
+  // if the build failed.
+  /* eslint-disable no-await-in-loop */
+  private ensureImageReady = async (version: string, buildType: string): Promise<boolean> => {
+    const stageText = (detail?: string) => detail || `Building ${buildType} image for ${version}`;
+
+    // While building, the right panel mirrors the live build log; fall back to a hint.
+    const applyStatus = (status: ImageStatusResponse) => {
+      this.setState({
+        buildStatus: stageText(status.detail),
+        output: status.logs
+          || `Preparing the ${buildType} build for ${version}…\n`
+            + 'The first run builds the image from CI artifacts and can take several minutes.',
+      });
+    };
+
+    let status = await this.client.prepareImage(version, buildType);
+    applyStatus(status);
+
+    while (status.state === 'building') {
+      await sleep(buildPollIntervalMs);
+      status = await this.client.getImageStatus(version, buildType);
+      applyStatus(status);
+    }
+
+    if (status.state === 'failed') {
+      const header = `Failed to build the ${buildType} image for ${version}: ${status.error || 'unknown error'}`;
+      this.setState({
+        output: status.logs ? `${header}\n\n--- build log ---\n${status.logs}` : header,
+      });
+      return false;
+    }
+
+    return status.state === 'ready';
+  };
+  /* eslint-enable no-await-in-loop */
+
+  private runQuery = async () => {
+    const {
+      input, selectedFormat,
+    } = this.state;
+    const selectedVersion = this.state.selectedVersion.trim();
+    const selectedBuildType = this.state.selectedBuildType.trim();
+
     this.setState({
       requestIsRunning: true,
       output: '',
+      buildStatus: '',
       timeElapsed: undefined,
     });
 
-    const { input, selectedVersion, selectedFormat } = this.state;
-
-    this.client
-      .runQuery(input, selectedVersion, selectedFormat)
-      .then((result: RunQueryResponse) => {
+    try {
+      const isRelease = !selectedBuildType || selectedBuildType === RELEASE_BUILD_TYPE;
+      if (!isRelease) {
         this.setState({
-          output: result.output,
-          timeElapsed: result.timeElapsed,
+          output: `Preparing the ${selectedBuildType} build for ${selectedVersion}.\n`
+            + 'The first run builds the image from CI artifacts and can take several minutes…',
         });
 
-        const path = `/${result.queryRunId}`;
-        if (this.navigate != null) {
-          this.navigate(path);
+        this.startBuildTimer();
+        const ready = await this.ensureImageReady(selectedVersion, selectedBuildType);
+        if (!ready) {
+          return;
         }
-      })
-      .catch((error) => {
-        console.log(error);
-        this.setState({
-          output: error.message,
-        });
-      })
-      .finally(() => this.setState({
+
+        // Keep the timer running through container start + query execution.
+        this.setState({ buildStatus: 'Running query', output: '' });
+      }
+
+      const result: RunQueryResponse = await this.client.runQuery(
+        input,
+        selectedVersion,
+        selectedBuildType,
+        selectedFormat,
+      );
+
+      this.setState({
+        output: result.output,
+        timeElapsed: result.timeElapsed,
+      });
+
+      const path = `/${result.queryRunId}`;
+      if (this.navigate != null) {
+        this.navigate(path);
+      }
+    } catch (error) {
+      console.log(error);
+      this.setState({
+        output: (error as Error).message,
+      });
+    } finally {
+      this.stopBuildTimer();
+      this.setState({
         requestIsRunning: false,
-      }));
+        buildStatus: '',
+      });
+    }
   };
 
   private isFormatSelectionDisabled = (): boolean => {
@@ -216,13 +357,18 @@ class App extends React.Component<AppProps, State> {
       >
         <Header
           tags={this.state.tags}
+          buildTypes={this.state.buildTypes}
           selectedVersion={this.state.selectedVersion}
+          selectedBuildType={this.state.selectedBuildType}
           selectedFormat={this.state.selectedFormat}
           outputFormats={outputFormats}
           requestIsRunning={this.state.requestIsRunning}
+          buildStatus={this.state.buildStatus}
+          buildElapsedSec={this.state.buildElapsedSec}
           isFormatSelectionDisabled={formatDisabled}
           githubRepoUrl={githubRepoUrl}
           onVersionChange={this.handleSelectedVersionChange}
+          onBuildTypeChange={this.handleSelectedBuildTypeChange}
           onFormatChange={this.handleSelectedFormatChange}
           onRunClick={this.handleRunButtonClick}
         />
@@ -231,6 +377,7 @@ class App extends React.Component<AppProps, State> {
           output={this.state.output}
           timeElapsed={this.state.timeElapsed}
           requestIsRunning={this.state.requestIsRunning}
+          followOutput={this.state.requestIsRunning && this.state.buildStatus !== ''}
           onInputChange={this.handleInputChange}
         />
       </Box>
