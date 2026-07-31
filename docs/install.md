@@ -76,7 +76,7 @@ The given docker-compose file defines the following services:
 - **prometheus** for application and system metrics scraping;
 - **cadvisor** for exporting resources usage by docker containers;
 - **grafana** for metrics visualization;
-- **playground** for serving user requests and running queries.
+- **playground** for serving API requests and running queries;
 - **webapp** for accessing the playground from a browser.
 
 Services other than playground are supplementary and can be
@@ -84,23 +84,9 @@ commented/deleted. Also, there are commented services `nginx` and `certbot`.
 You can uncomment these sections and configure proxying the way you like
 (provide existing certificates or setup ACME).
 
-You might have noticed that the host docker daemon socket is mounted in the 
-playground container. The playground services needs access to the host
-docker daemon to run ClickHouse containers locally. You may unmount 
-the host socket and specify [remote runners](./remote-daemon.md).
-
-### Building the web application
-
-If you want to have a front-end application, you have to build an image.
-
-Fast way:
-```bash
-# An address of the backend API (users will use it when accessing the playground).
-export API_URL='https://fiddle.clickhouse.com/api/'
-docker build --build-arg API_URL="$API_URL" -t lodthe/clickhouse-playground-ui ./ui
-```
-
-See the [UI README](../ui/README.md) for local development instructions.
+You might have noticed that the host Docker daemon socket is mounted in the
+playground container. The playground service needs access to the host Docker
+daemon to run ClickHouse containers locally.
 
 ### Running services
 
