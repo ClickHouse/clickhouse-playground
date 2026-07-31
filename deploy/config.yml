@@ -23,6 +23,39 @@ docker_image:
   # [OPTIONAL] How often available image tags will be fetched from dockerhub.
   image_tags_cache_expiration_time: 3m
 
+  # [OPTIONAL] Local builds of non-release ClickHouse images (debug, asan, tsan, msan, ubsan).
+  # Release images are pulled from Docker Hub; the other build types are not published there,
+  # so when enabled the backend builds them locally from the .deb packages produced by
+  # ClickHouse CI on release branches, caches the resulting image, and runs it.
+  # These builds are large and slow (minutes), so they are prepared asynchronously via
+  # POST /api/images/prepare and polled via GET /api/images/status before running a query.
+  # Default: disabled.
+  builds:
+    enabled: false
+
+    # [OPTIONAL] S3 location hosting ClickHouse CI (praktika) report JSON files.
+    # Default: https://s3.amazonaws.com/clickhouse-test-reports
+    report_base_url: https://s3.amazonaws.com/clickhouse-test-reports
+
+    # [OPTIONAL] GitHub API base URL, used to resolve a version's "-stable" git tag to a sha.
+    # Default: https://api.github.com
+    github_api_url: https://api.github.com
+
+    # [OPTIONAL] ClickHouse GitHub repository ("owner/name"). Default: ClickHouse/ClickHouse.
+    repository: ClickHouse/ClickHouse
+
+    # [OPTIONAL] GitHub token. Raises the API rate limit for tag resolution. Default: none.
+    github_token: ""
+
+    # [OPTIONAL] How long resolved artifact URLs are cached. Default: 30m.
+    resolve_cache_ttl: 30m
+
+    # [OPTIONAL] Maximum duration of a single image build. Default: 45m.
+    timeout: 45m
+
+    # [OPTIONAL] Maximum number of concurrent image builds. 0 means unlimited. Default: 1.
+    max_concurrent: 1
+
 # Rest API configuration.
 api:
   # [OPTIONAL] Server listening address. Default: :9000.

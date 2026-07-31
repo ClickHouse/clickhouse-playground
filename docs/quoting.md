@@ -1,3 +1,0 @@
-# Quoting
-
-TBD.

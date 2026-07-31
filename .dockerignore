@@ -1,5 +1,22 @@
 .env
-config-prod.yaml
+*.env
+.git
 .github
-build
+.agents
+.codex
+.vscode
+
+# The backend image does not use deployment, documentation, or UI sources.
+deploy
+docs
+ui
+README.md
+LICENSE
+openapi.yml
 Makefile
+
+# Test and local-development files are not required to compile the backend.
+**/*_test.go
+coverage.out
+build
+bin
