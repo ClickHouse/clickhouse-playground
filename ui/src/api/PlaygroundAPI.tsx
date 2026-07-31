@@ -1,0 +1,193 @@
+export type GetTagsResponse = {
+  tags: string[];
+};
+
+export type GetBuildTypesResponse = {
+  buildTypes: string[];
+};
+
+// ImageBuildState mirrors the backend qrunner.ImageState values.
+export type ImageBuildState = 'building' | 'ready' | 'failed';
+
+export type ImageStatusResponse = {
+  state: ImageBuildState;
+  detail?: string;
+  logs?: string;
+  error?: string;
+};
+
+export type GetQueryRunResponse = {
+  version: string;
+  buildType: string;
+  input: string;
+  output: string;
+  queryRunId: string;
+};
+
+export type RunQueryResponse = {
+  queryRunId: string;
+  output: string;
+  timeElapsed: string;
+};
+
+export const RELEASE_BUILD_TYPE = 'release';
+
+export class Client {
+  apiBaseUrl: string;
+
+  constructor(apiUrl: string) {
+    this.apiBaseUrl = apiUrl;
+  }
+
+  public getTags(): Promise<GetTagsResponse> {
+    return fetch(`${this.apiBaseUrl}tags`)
+      .then((response) => response.json())
+      .then((response) => {
+        if (response.result) {
+          return {
+            tags: response.result.tags,
+          };
+        }
+        throw Error(response.error.message);
+      })
+      .catch((error) => {
+        throw error;
+      });
+  }
+
+  public getBuildTypes(): Promise<GetBuildTypesResponse> {
+    return fetch(`${this.apiBaseUrl}build-types`)
+      .then((response) => response.json())
+      .then((response) => {
+        if (response.result) {
+          return {
+            buildTypes: response.result.build_types,
+          };
+        }
+        throw Error(response.error.message);
+      })
+      .catch((error) => {
+        throw error;
+      });
+  }
+
+  // prepareImage triggers (or re-triggers) a local build of a non-release image and
+  // returns the current build state.
+  public prepareImage(version: string, buildType: string): Promise<ImageStatusResponse> {
+    const requestMetadata = {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        version,
+        build_type: buildType,
+      }),
+    };
+
+    return fetch(`${this.apiBaseUrl}images/prepare`, requestMetadata)
+      .then((response) => response.json())
+      .then((response) => {
+        if (response.result) {
+          return {
+            state: response.result.state,
+            detail: response.result.detail,
+            logs: response.result.logs,
+            error: response.result.error,
+          };
+        }
+        throw Error(response.error.message);
+      })
+      .catch((error) => {
+        throw error;
+      });
+  }
+
+  public getImageStatus(version: string, buildType: string): Promise<ImageStatusResponse> {
+    // The status response changes while an image is building. Use a unique URL as
+    // well as the browser cache directive so intermediary caches cannot serve a
+    // previous poll result.
+    const params = new URLSearchParams({
+      version,
+      build_type: buildType,
+      _cache_bust: Date.now().toString(),
+    });
+
+    return fetch(`${this.apiBaseUrl}images/status?${params.toString()}`, { cache: 'no-store' })
+      .then((response) => response.json())
+      .then((response) => {
+        if (response.result) {
+          return {
+            state: response.result.state,
+            detail: response.result.detail,
+            logs: response.result.logs,
+            error: response.result.error,
+          };
+        }
+        throw Error(response.error.message);
+      })
+      .catch((error) => {
+        throw error;
+      });
+  }
+
+  public runQuery(
+    query: string,
+    version: string,
+    buildType: string,
+    format: string,
+  ): Promise<RunQueryResponse> {
+    const requestMetadata = {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        query,
+        version,
+        build_type: buildType,
+        settings: {
+          clickhouse: {
+            output_format: format,
+          },
+        },
+      }),
+    };
+
+    return fetch(`${this.apiBaseUrl}runs`, requestMetadata)
+      .then((response) => response.json())
+      .then((response) => {
+        if (response.result) {
+          return {
+            queryRunId: response.result.query_run_id,
+            output: response.result.output,
+            timeElapsed: response.result.time_elapsed,
+          };
+        }
+        throw Error(response.error.message);
+      })
+      .catch((error) => {
+        throw error;
+      });
+  }
+
+  public getQueryRun(id: string): Promise<GetQueryRunResponse> {
+    return fetch(`${this.apiBaseUrl}runs/${id}`)
+      .then((response) => response.json())
+      .then((response) => {
+        if (response.result) {
+          return {
+            version: response.result.version,
+            buildType: response.result.build_type || RELEASE_BUILD_TYPE,
+            input: response.result.input,
+            output: response.result.output,
+            queryRunId: response.result.query_run_id,
+          };
+        }
+        throw Error(response.error.message);
+      })
+      .catch((error) => {
+        throw error;
+      });
+  }
+}

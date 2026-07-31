@@ -24,6 +24,14 @@ The saved result can be accessed by the generated ID.
 
 Users communicate with the playground using REST API.
 
+## Repository layout
+
+---
+
+- `cmd/`, `internal/`, `pkg/` — Go backend and API.
+- `ui/` — React/TypeScript web application. See its [README](./ui/README.md) for local UI commands.
+- `deploy/` — production and local Docker Compose configurations.
+
 ## Useful links
 
 ---

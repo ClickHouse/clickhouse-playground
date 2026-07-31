@@ -95,15 +95,12 @@ If you want to have a front-end application, you have to build an image.
 
 Fast way:
 ```bash
-git clone git@github.com:lodthe/clickhouse-playground-ui.git
-cd clickhouse-playground-ui
-
 # An address of the backend API (users will use it when accessing the playground).
 export API_URL='https://fiddle.clickhouse.com/api/'
-docker build --build-arg API_URL="$API_URL" -t lodthe/clickhouse-playground-ui
+docker build --build-arg API_URL="$API_URL" -t lodthe/clickhouse-playground-ui ./ui
 ```
 
-Refer to the [clickhouse-playground-ui](https://github.com/lodthe/clickhouse-playground-ui) readme for more information.
+See the [UI README](../ui/README.md) for local development instructions.
 
 ### Running services
 

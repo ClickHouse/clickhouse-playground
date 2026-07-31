@@ -6,7 +6,21 @@ on:
       - v*
     branches:
       - main
+    paths:
+      - '**/*.go'
+      - 'go.mod'
+      - 'go.sum'
+      - 'Dockerfile'
+      - 'internal/qrunner/dockerengine/buildcontext/**'
+      - '.github/workflows/go-tests.yml'
   pull_request:
+    paths:
+      - '**/*.go'
+      - 'go.mod'
+      - 'go.sum'
+      - 'Dockerfile'
+      - 'internal/qrunner/dockerengine/buildcontext/**'
+      - '.github/workflows/go-tests.yml'
 
 jobs:
   test:
