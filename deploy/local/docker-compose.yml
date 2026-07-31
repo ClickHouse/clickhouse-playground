@@ -60,8 +60,7 @@ services:
 
   ui:
     build:
-      # TODO: Move the Web App to this repo.
-      context: ../../../clickhouse-playground-ui
+      context: ../../ui
       dockerfile: Dockerfile
       args:
         # Same-origin: the UI fetches /api/* and nginx (below) proxies to the backend.

@@ -17,7 +17,8 @@ Then open **http://localhost:3001**. The backend API is on **http://localhost:90
 - **backend** — built from this repo. Lists Docker Hub tags anonymously, stores runs in the
   local DynamoDB (`aws.endpoint_url`), and builds debug/sanitizer images on the host Docker
   daemon (mounted `docker.sock`). Local builds are enabled in `config.yml`.
-- **ui** — built from `../../../clickhouse-playground-ui` with `API_URL=http://localhost:9000/api/`.
+- **ui** — built from this repository's `ui/` directory with `API_URL=/api/`; its nginx
+  configuration proxies `/api/*` to the backend.
 
 ## Checking the feature
 

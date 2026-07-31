@@ -4,17 +4,13 @@ A simple web application that allows people to interact with ClickHouse by runni
 
 Available at [fiddle.clickhouse.com](https://fiddle.clickhouse.com/).
 
-The back-end engine is located in [another repo](https://github.com/lodthe/clickhouse-playground).
+The back-end engine lives alongside this application in the repository root.
 
 ## Running Locally
 
-Clone the repository:
+From the repository root:
 ```bash
-git clone git@github.com:lodthe/clickhouse-playground-ui.git
-# or HTTPS version:
-# git clone https://github.com/lodthe/clickhouse-playground-ui.git
-
-cd clickhouse-playground-ui
+cd ui
 ```
 
 Install dependencies and start the development server:
@@ -30,7 +26,7 @@ Build a Docker image:
 # Address of the backend API
 export API_URL='https://fiddle.clickhouse.com/api/'
 
-docker build --build-arg API_URL="$API_URL" -t lodthe/clickhouse-playground-ui .
+docker build --build-arg API_URL="$API_URL" -t lodthe/clickhouse-playground-ui ./ui
 ```
 
 Run a container based on the built image:
