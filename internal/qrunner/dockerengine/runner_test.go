@@ -5,7 +5,6 @@ import (
 	"os"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/lodthe/clickhouse-playground/internal/dbsettings/runsettings"
 	"github.com/lodthe/clickhouse-playground/internal/dockertag"
@@ -41,20 +40,14 @@ func TestCustomSettings(t *testing.T) {
 	tagStorage := tagStorageMock{
 		images: map[string]dockertag.Image{
 			"21": {
-				Repository:   "yandex/clickhouse-server",
-				Tag:          "21",
-				OS:           "linux",
-				Architecture: "amd64",
-				Digest:       "sha256:edfee043e4f909dd471c6e282ce3cfd0ce90a4cad3fc234cb27633debe26ea05",
-				PushedAt:     time.Now(),
+				Repository: "yandex/clickhouse-server",
+				Tag:        "21",
+				Digest:     "sha256:edfee043e4f909dd471c6e282ce3cfd0ce90a4cad3fc234cb27633debe26ea05",
 			},
 			"20": {
-				Repository:   "yandex/clickhouse-server",
-				Tag:          "21",
-				OS:           "linux",
-				Architecture: "amd64",
-				Digest:       "sha256:c03c136ca0e87f9b821718f05dc45dea413946ff650ad15980ea89d1c34c87d3",
-				PushedAt:     time.Now(),
+				Repository: "yandex/clickhouse-server",
+				Tag:        "21",
+				Digest:     "sha256:c03c136ca0e87f9b821718f05dc45dea413946ff650ad15980ea89d1c34c87d3",
 			},
 		},
 	}

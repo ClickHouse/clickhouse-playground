@@ -9,15 +9,17 @@ import (
 	"time"
 
 	"github.com/lodthe/clickhouse-playground/pkg/chspec"
-	"github.com/lodthe/clickhouse-playground/pkg/dockerhub"
 
 	"github.com/pkg/errors"
 	"github.com/rs/zerolog"
 	"golang.org/x/sync/errgroup"
 )
 
-type DockerHubClient interface {
-	GetTags(repository string) ([]dockerhub.ImageTag, error)
+type RegistryClient interface {
+	// GetTags returns all tags of the repository.
+	GetTags(repository string) ([]string, error)
+	// GetDigest resolves the manifest digest the tag currently points to.
+	GetDigest(repository string, tag string) (string, error)
 }
 
 // Cache is a cache for the list of docker image's tags.
@@ -25,7 +27,7 @@ type Cache struct {
 	ctx    context.Context
 	config Config
 	logger zerolog.Logger
-	cli    DockerHubClient
+	cli    RegistryClient
 
 	updating int32
 
@@ -35,7 +37,7 @@ type Cache struct {
 	images     []Image
 }
 
-func NewCache(ctx context.Context, config Config, logger zerolog.Logger, cli DockerHubClient) *Cache {
+func NewCache(ctx context.Context, config Config, logger zerolog.Logger, cli RegistryClient) *Cache {
 	return &Cache{
 		ctx:        ctx,
 		config:     config,
@@ -104,15 +106,40 @@ func (c *Cache) Exists(tag string) bool {
 }
 
 // Find searches an image by its tag.
-func (c *Cache) Find(tag string) (img Image, found bool) {
+//
+// The image digest is resolved lazily on the first call and cached until the next cache
+// refresh, so mutable tags (head, latest, major.minor) are re-resolved once per expiration
+// period. A digest resolution failure is not fatal: the image is returned with an empty
+// digest and the caller decides.
+func (c *Cache) Find(tag string) (Image, bool) {
+	key := c.normalizeTag(tag)
+
 	c.mu.RLock()
-	defer c.mu.RUnlock()
+	img, found := c.imageByTag[key]
+	c.updateIfExpired()
+	c.mu.RUnlock()
 
-	defer c.updateIfExpired()
+	if !found || img.Digest != "" {
+		return img, found
+	}
 
-	img, found = c.imageByTag[c.normalizeTag(tag)]
+	digest, err := c.cli.GetDigest(img.Repository, img.Tag)
+	if err != nil {
+		c.logger.Error().Err(err).Str("repository", img.Repository).Str("tag", img.Tag).Msg("failed to resolve image digest")
 
-	return img, found
+		return img, true
+	}
+
+	img.Digest = digest
+
+	c.mu.Lock()
+	// A concurrent refresh may have replaced the entry; only fill the resolved digest in.
+	if cur, ok := c.imageByTag[key]; ok && cur.Repository == img.Repository && cur.Digest == "" {
+		c.imageByTag[key] = img
+	}
+	c.mu.Unlock()
+
+	return img, true
 }
 
 // updateIfExpired asynchronously updates cache if the cache has expired.
@@ -220,43 +247,23 @@ func (c *Cache) getImagesFromSeveralRepositories(repositories []string) ([]Image
 	return c.sortImages(imgByTag), imgByTag, nil
 }
 
-// getImages returns a list of images from the given dockerhub repository.
-// It fetches all images and filters them by the supported OS and architecture.
+// getImages returns a list of images from the given repository.
 func (c *Cache) getImages(repository string) ([]Image, error) {
 	tags, err := c.cli.GetTags(repository)
 	if err != nil {
-		c.logger.Error().Err(err).Str("repository", repository).Msg("failed to get dockerhub tags")
-		return nil, errors.Wrap(err, "failed to get tags from dockerhub")
+		c.logger.Error().Err(err).Str("repository", repository).Msg("failed to get registry tags")
+		return nil, errors.Wrap(err, "failed to get tags from the registry")
 	}
 
-	c.logger.Debug().Str("repository", repository).Msg("start fetching images")
-
-	var images []Image
-
-	for _, t := range tags {
-		for _, i := range t.Images {
-			if !strings.EqualFold(i.OS, c.config.OS) || !strings.EqualFold(i.Architecture, c.config.Architecture) {
-				continue
-			}
-
-			converted := Image{
-				Repository:   repository,
-				Tag:          t.Name,
-				OS:           i.OS,
-				Architecture: i.Architecture,
-				Digest:       i.Digest,
-				PushedAt:     i.LastPushed,
-			}
-
-			images = append(images, converted)
-		}
+	images := make([]Image, 0, len(tags))
+	for _, tag := range tags {
+		images = append(images, Image{
+			Repository: repository,
+			Tag:        tag,
+		})
 	}
 
 	c.logger.Debug().Str("repository", repository).Int("count", len(images)).Msg("images have been fetched")
-
-	sort.Slice(images, func(i, j int) bool {
-		return images[i].PushedAt.After(images[j].PushedAt)
-	})
 
 	return images, nil
 }

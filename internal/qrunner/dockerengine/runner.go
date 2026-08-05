@@ -241,7 +241,15 @@ func (r *Runner) resolveImage(ctx context.Context, version string, bt buildtype.
 	}
 
 	imageTag = FullImageName(img.Repository, version)
-	imageFQN = PlaygroundImageName(img.Repository, img.Digest)
+
+	// When the digest cannot be resolved, fall back to tag-addressed naming so the query
+	// can still run. An image cached under the tag-addressed name may be stale for mutable
+	// tags (head, latest) until the digest resolves again.
+	discriminator := img.Digest
+	if discriminator == "" {
+		discriminator = img.Tag
+	}
+	imageFQN = PlaygroundImageName(img.Repository, discriminator)
 
 	return imageTag, imageFQN, nil
 }
