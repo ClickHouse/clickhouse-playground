@@ -26,7 +26,6 @@ const apiUrl = process.env.REACT_APP_API_URL;
 const githubRepoUrl = 'https://github.com/lodthe/clickhouse-playground';
 
 const localStorageFormatKey = 'clickhouse-playground-format';
-const localStorageBuildTypeKey = 'clickhouse-playground-build-type';
 
 // How often the image build status is polled while a non-release image is being built.
 const buildPollIntervalMs = 2000;
@@ -73,7 +72,8 @@ class App extends React.Component<AppProps, State> {
       tags: ['latest'],
       buildTypes: [RELEASE_BUILD_TYPE],
       selectedVersion: 'latest',
-      selectedBuildType: localStorage.getItem(localStorageBuildTypeKey) || RELEASE_BUILD_TYPE,
+      // Intentionally not restored from localStorage.
+      selectedBuildType: RELEASE_BUILD_TYPE,
       selectedFormat: localStorage.getItem(localStorageFormatKey) || 'TabSeparated',
       input: '',
       initialInput: '',
@@ -131,7 +131,7 @@ class App extends React.Component<AppProps, State> {
 
         this.setState((prev) => ({
           buildTypes,
-          // Reset to release if the persisted build type is no longer offered.
+          // A run restored from the URL may carry a build type the server does not offer.
           selectedBuildType: buildTypes.includes(prev.selectedBuildType)
             ? prev.selectedBuildType
             : RELEASE_BUILD_TYPE,
@@ -175,7 +175,6 @@ class App extends React.Component<AppProps, State> {
   };
 
   private handleSelectedBuildTypeChange = (newValue: string) => {
-    localStorage.setItem(localStorageBuildTypeKey, newValue);
     this.setState({
       selectedBuildType: newValue,
     });
