@@ -3,26 +3,37 @@ package dockertag
 import (
 	"context"
 	"testing"
-	"time"
-
-	"github.com/lodthe/clickhouse-playground/pkg/dockerhub"
 
 	"github.com/pkg/errors"
 	zlog "github.com/rs/zerolog/log"
 	"github.com/stretchr/testify/assert"
 )
 
-type DockerHubClientMock struct {
-	images map[string][]dockerhub.ImageTag
+type RegistryClientMock struct {
+	tags    map[string][]string
+	digests map[string]string // "repository:tag" -> digest
+
+	digestCalls int
 }
 
-func (c *DockerHubClientMock) GetTags(repository string) ([]dockerhub.ImageTag, error) {
-	images, exists := c.images[repository]
+func (c *RegistryClientMock) GetTags(repository string) ([]string, error) {
+	tags, exists := c.tags[repository]
 	if !exists {
 		return nil, errors.New("not found")
 	}
 
-	return images, nil
+	return tags, nil
+}
+
+func (c *RegistryClientMock) GetDigest(repository string, tag string) (string, error) {
+	c.digestCalls++
+
+	digest, exists := c.digests[repository+":"+tag]
+	if !exists {
+		return "", errors.New("not found")
+	}
+
+	return digest, nil
 }
 
 func TestGetImagesFromSeveralRepositories(t *testing.T) {
@@ -31,61 +42,12 @@ func TestGetImagesFromSeveralRepositories(t *testing.T) {
 			"a/clickhouse",
 			"b/clickhouse",
 		},
-		OS:             "linux",
-		Architecture:   "amd64",
 		ExpirationTime: DefaultExpirationTime,
 	}
-	cli := &DockerHubClientMock{
-		images: map[string][]dockerhub.ImageTag{
-			"a/clickhouse": {
-				{
-					Images: []dockerhub.Image{
-						{
-							Architecture: "linux",
-							OS:           "invalid os, should be skipped",
-							LastPushed:   time.Now(),
-						},
-						{
-							Architecture: config.Architecture,
-							OS:           config.OS,
-							LastPushed:   time.Now().Add(-time.Hour),
-						},
-					},
-					Name: "latest",
-				},
-				{
-					Images: []dockerhub.Image{
-						{
-							Architecture: config.Architecture,
-							OS:           config.OS,
-							LastPushed:   time.Now().Add(time.Hour),
-						},
-					},
-					Name: "latest-alpine",
-				},
-			},
-			"b/clickhouse": {
-				{
-					Images: []dockerhub.Image{
-						{
-							Architecture: config.Architecture,
-							OS:           config.OS,
-							LastPushed:   time.Now().Add(-time.Hour),
-						},
-					},
-					Name: "latest",
-				},
-				{
-					Images: []dockerhub.Image{
-						{
-							Architecture: config.Architecture,
-							OS:           config.OS,
-							LastPushed:   time.Now().Add(2 * time.Hour),
-						},
-					},
-					Name: "21.8",
-				},
-			},
+	cli := &RegistryClientMock{
+		tags: map[string][]string{
+			"a/clickhouse": {"latest", "latest-alpine"},
+			"b/clickhouse": {"latest", "21.8"},
 		},
 	}
 
@@ -100,9 +62,48 @@ func TestGetImagesFromSeveralRepositories(t *testing.T) {
 	assert.Equal(t, "latest", images[1].Tag)
 	assert.Equal(t, "21.8", images[2].Tag)
 
+	// If a tag is presented in several repositories, the first repository wins.
+	assert.Equal(t, "a/clickhouse", imgByTag["latest"].Repository)
+
 	for _, img := range images {
 		assert.Equal(t, img, imgByTag[cache.normalizeTag(img.Tag)])
 	}
+}
+
+func TestFindResolvesDigestLazily(t *testing.T) {
+	config := Config{
+		Repositories:   []string{"a/clickhouse"},
+		ExpirationTime: DefaultExpirationTime,
+	}
+	cli := &RegistryClientMock{
+		tags: map[string][]string{
+			"a/clickhouse": {"24.3", "head"},
+		},
+		digests: map[string]string{
+			"a/clickhouse:24.3": "sha256:abc",
+		},
+	}
+
+	cache := NewCache(context.Background(), config, zlog.Logger, cli)
+	assert.NoError(t, cache.Update())
+
+	img, found := cache.Find("24.3")
+	assert.True(t, found)
+	assert.Equal(t, "sha256:abc", img.Digest)
+
+	// The resolved digest is cached.
+	img, found = cache.Find("24.3")
+	assert.True(t, found)
+	assert.Equal(t, "sha256:abc", img.Digest)
+	assert.Equal(t, 1, cli.digestCalls)
+
+	// A digest resolution failure is not fatal: the image is returned without a digest.
+	img, found = cache.Find("head")
+	assert.True(t, found)
+	assert.Empty(t, img.Digest)
+
+	_, found = cache.Find("unknown")
+	assert.False(t, found)
 }
 
 func TestSortImages(t *testing.T) {
@@ -138,12 +139,10 @@ func TestSortImages(t *testing.T) {
 			"a/clickhouse",
 			"b/clickhouse",
 		},
-		OS:             "linux",
-		Architecture:   "amd64",
 		ExpirationTime: DefaultExpirationTime,
 	}
-	cli := &DockerHubClientMock{
-		images: make(map[string][]dockerhub.ImageTag),
+	cli := &RegistryClientMock{
+		tags: make(map[string][]string),
 	}
 
 	cache := NewCache(context.Background(), config, zlog.Logger, cli)

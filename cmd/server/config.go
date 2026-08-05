@@ -71,8 +71,6 @@ type DockerAuth struct {
 type DockerImage struct {
 	Auth                DockerAuth    `mapstructure:"auth"`
 	Repositories        []string      `mapstructure:"repositories"`
-	OS                  string        `mapstructure:"os"`
-	Architecture        string        `mapstructure:"architecture"`
 	CacheExpirationTime time.Duration `mapstructure:"image_tags_cache_expiration_time"`
 
 	Builds Builds `mapstructure:"builds"`
@@ -257,23 +255,17 @@ func (c *Config) validate() error {
 		return fmt.Errorf("invalid log format (available: %s, %s)", JSONLogFormat, PrettyLogFormat)
 	}
 
-	// Docker Hub credentials are optional: when omitted, tags are listed anonymously (with
-	// stricter rate limits). Provide them to raise the rate limit, see
-	// https://docs.docker.com/reference/api/hub/latest/#tag/authentication-api/operation/AuthCreateAccessToken
+	// Docker Hub credentials are optional: anonymous pull tokens are issued for public
+	// repositories. Provide credentials (username + personal access token) to raise the
+	// registry rate limits.
 	if (c.DockerImage.Auth.Identifier == "") != (c.DockerImage.Auth.Secret == "") {
 		return errors.New("docker_image.auth.identifier and docker_image.auth.secret must be set together")
 	}
 	if c.DockerImage.Auth.Identifier == "" {
-		zlog.Warn().Msg("docker_image.auth is empty; listing Docker Hub tags anonymously (rate limited)")
+		zlog.Warn().Msg("docker_image.auth is empty; using anonymous registry pull tokens (rate limited)")
 	}
 	if len(c.DockerImage.Repositories) == 0 {
 		return errors.New("docker_image.repositories must be non-empty")
-	}
-	if c.DockerImage.OS == "" {
-		return errors.New("docker_image.os is required")
-	}
-	if c.DockerImage.Architecture == "" {
-		return errors.New("docker_image.architecture is required")
 	}
 	if c.DockerImage.CacheExpirationTime == 0 {
 		c.DockerImage.CacheExpirationTime = dockertag.DefaultExpirationTime

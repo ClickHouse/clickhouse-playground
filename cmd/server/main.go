@@ -15,7 +15,7 @@ import (
 	"github.com/lodthe/clickhouse-playground/internal/qrunner/dockerengine"
 	"github.com/lodthe/clickhouse-playground/internal/queryrun"
 	"github.com/lodthe/clickhouse-playground/pkg/clickhousebuilds"
-	"github.com/lodthe/clickhouse-playground/pkg/dockerhub"
+	"github.com/lodthe/clickhouse-playground/pkg/dockerregistry"
 	api "github.com/lodthe/clickhouse-playground/pkg/restapi"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -75,13 +75,14 @@ func main() {
 			o.BaseEndpoint = aws.String(config.AWS.EndpointURL)
 		}
 	})
-	dockerhubCli := dockerhub.NewClient(logger, dockerhub.DockerHubURL, dockerhub.DefaultMaxRPS, dockerhub.Auth(config.DockerImage.Auth))
+	registryCli := dockerregistry.NewClient(logger, dockerregistry.DefaultMaxRPS, dockerregistry.Auth{
+		Username: config.DockerImage.Auth.Identifier,
+		Password: config.DockerImage.Auth.Secret,
+	})
 	tagStorage := dockertag.NewCache(ctx, dockertag.Config{
 		Repositories:   config.DockerImage.Repositories,
-		OS:             config.DockerImage.OS,
-		Architecture:   config.DockerImage.Architecture,
 		ExpirationTime: config.DockerImage.CacheExpirationTime,
-	}, logger, dockerhubCli)
+	}, logger, registryCli)
 
 	// Load tags asynchronously so Docker Hub outages / API changes do not block read endpoints,
 	// which do not require a complete tag list.

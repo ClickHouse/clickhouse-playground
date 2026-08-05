@@ -1,14 +1,10 @@
 package dockertag
 
-import "time"
-
 type Image struct {
 	Repository string
 	Tag        string
 
-	OS           string
-	Architecture string
-	Digest       string
-
-	PushedAt time.Time
+	// Digest of the manifest (index) the tag currently points to.
+	// Resolved lazily on Find; empty until the first successful resolution.
+	Digest string
 }
