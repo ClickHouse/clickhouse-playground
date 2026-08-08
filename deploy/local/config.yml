@@ -10,9 +10,6 @@ docker_image:
   repositories:
     - clickhouse/clickhouse-server
 
-  os: linux
-  architecture: amd64
-
   image_tags_cache_expiration_time: 3m
 
   # Enable local debug/sanitizer image builds.
