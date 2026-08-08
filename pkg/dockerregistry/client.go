@@ -127,8 +127,9 @@ func (c *Client) getToken(repository string) (string, error) {
 	}
 
 	// Per the token spec, a missing expires_in means 60 seconds.
+	// https://distribution.github.io/distribution/spec/auth/token/
 	if parsed.ExpiresIn <= 0 {
-		parsed.ExpiresIn = 60
+		parsed.ExpiresIn = 60 //nolint:revive
 	}
 
 	c.mu.Lock()
