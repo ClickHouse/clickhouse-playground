@@ -30,7 +30,6 @@ export default function SelectDropdown(props: SelectDropdownProps) {
         },
       }}
       disableClearable
-      autoSelect
       options={options}
       value={value}
       disabled={disabled}
