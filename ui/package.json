@@ -21,7 +21,7 @@
     "react": "latest",
     "react-dom": "latest",
     "react-resizable-panels": "^2.1.7",
-    "react-router-dom": "^6.3.0",
+    "react-router-dom": "^6.30.4",
     "react-scripts": "^5.0.1",
     "typescript": "latest"
   },
