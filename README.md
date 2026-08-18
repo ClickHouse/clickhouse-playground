@@ -1,6 +1,6 @@
-# ClickHouse Playground
+# ClickHouse Fiddle
 
-ClickHouse Playground allows running SQL queries from a browser without having a database instance on the user's side.
+ClickHouse Fiddle allows running SQL queries from a browser without having a database instance on the user's side.
 It allows to run any queries in arbitrary ClickHouse version
 and share the execution results with others.
 
