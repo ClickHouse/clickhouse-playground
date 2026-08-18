@@ -1,10 +1,20 @@
 {
-  "short_name": "ClickHouse Playground",
-  "name": "ClickHouse Playground",
+  "short_name": "Fiddle",
+  "name": "Fiddle",
   "icons": [
     {
+      "src": "favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    },
+    {
+      "src": "favicon.png",
+      "sizes": "32x32",
+      "type": "image/png"
+    },
+    {
       "src": "favicon.ico",
-      "sizes": "64x64 32x32 24x24 16x16",
+      "sizes": "32x32",
       "type": "image/x-icon"
     }
   ],
