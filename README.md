@@ -40,3 +40,7 @@ Users communicate with the playground using REST API.
 - [Documentation](./docs/readme.md)
 - [Installation guide](./docs/install.md)
 - [API Specficiation](./openapi.yml)
+
+---
+
+Originally created by Igor Baliuk @lodthe. 
