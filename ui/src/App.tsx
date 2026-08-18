@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { NavigateFunction, useNavigate } from 'react-router-dom';
-import Box from '@mui/material/Box';
+import { ThemeName } from '@clickhouse/click-ui';
 import {
   Client,
   GetBuildTypesResponse,
@@ -51,6 +51,8 @@ type State = {
 
 interface AppProps {
   navigate: NavigateFunction;
+  theme: ThemeName;
+  onThemeToggle: () => void;
 }
 
 class App extends React.Component<AppProps, State> {
@@ -95,11 +97,7 @@ class App extends React.Component<AppProps, State> {
       this.setState({ selectedFormat: savedFormat });
     }
 
-    window.addEventListener('keydown', (e: KeyboardEvent) => {
-      if (e.metaKey && e.key === 'Enter') {
-        this.runQuery();
-      }
-    });
+    window.addEventListener('keydown', this.handleGlobalKeyDown);
 
     const matches = window.location.pathname.match(/\/([a-z\d-]+)/);
     if (matches) {
@@ -143,8 +141,18 @@ class App extends React.Component<AppProps, State> {
   }
 
   componentWillUnmount() {
+    window.removeEventListener('keydown', this.handleGlobalKeyDown);
     this.stopBuildTimer();
   }
+
+  // Cmd+Enter on macOS, Ctrl+Enter elsewhere. Both modifiers are accepted on
+  // every platform, matching play.clickhouse.com.
+  private handleGlobalKeyDown = (e: KeyboardEvent) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+      e.preventDefault();
+      this.runQuery();
+    }
+  };
 
   private startBuildTimer = () => {
     this.buildStartMs = Date.now();
@@ -180,8 +188,7 @@ class App extends React.Component<AppProps, State> {
     });
   };
 
-  private handleSelectedFormatChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const newFormat = event.target.value;
+  private handleSelectedFormatChange = (newFormat: string) => {
     localStorage.setItem(localStorageFormatKey, newFormat);
     this.setState({
       selectedFormat: newFormat,
@@ -233,7 +240,8 @@ class App extends React.Component<AppProps, State> {
     const applyStatus = (status: ImageStatusResponse) => {
       this.setState({
         buildStatus: stageText(status.detail),
-        output: status.logs
+        output:
+          status.logs
           || `Preparing the ${buildType} build for ${version}…\n`
             + 'The first run builds the image from CI artifacts and can take several minutes.',
       });
@@ -261,9 +269,13 @@ class App extends React.Component<AppProps, State> {
   /* eslint-enable no-await-in-loop */
 
   private runQuery = async () => {
-    const {
-      input, selectedFormat,
-    } = this.state;
+    // The Run button is disabled while a request runs, but the keyboard
+    // shortcut is not — ignore repeated triggers.
+    if (this.state.requestIsRunning) {
+      return;
+    }
+
+    const { input, selectedFormat } = this.state;
     const selectedVersion = this.state.selectedVersion.trim();
     const selectedBuildType = this.state.selectedBuildType.trim();
 
@@ -278,7 +290,8 @@ class App extends React.Component<AppProps, State> {
       const isRelease = !selectedBuildType || selectedBuildType === RELEASE_BUILD_TYPE;
       if (!isRelease) {
         this.setState({
-          output: `Preparing the ${selectedBuildType} build for ${selectedVersion}.\n`
+          output:
+            `Preparing the ${selectedBuildType} build for ${selectedVersion}.\n`
             + 'The first run builds the image from CI artifacts and can take several minutes…',
         });
 
@@ -342,18 +355,7 @@ class App extends React.Component<AppProps, State> {
     const formatDisabled = this.state.requestIsRunning || this.isFormatSelectionDisabled();
 
     return (
-      <Box
-        sx={{
-          display: 'flex',
-          flexDirection: 'column',
-          height: '100dvh',
-          width: '100%',
-          maxWidth: '100%',
-          px: { xs: 1, sm: 2, md: 3 },
-          boxSizing: 'border-box',
-          overflow: 'hidden',
-        }}
-      >
+      <div className="app-root">
         <Header
           tags={this.state.tags}
           buildTypes={this.state.buildTypes}
@@ -366,10 +368,12 @@ class App extends React.Component<AppProps, State> {
           buildElapsedSec={this.state.buildElapsedSec}
           isFormatSelectionDisabled={formatDisabled}
           githubRepoUrl={githubRepoUrl}
+          theme={this.props.theme}
           onVersionChange={this.handleSelectedVersionChange}
           onBuildTypeChange={this.handleSelectedBuildTypeChange}
           onFormatChange={this.handleSelectedFormatChange}
           onRunClick={this.handleRunButtonClick}
+          onThemeToggle={this.props.onThemeToggle}
         />
         <EditorPanel
           initialInput={this.state.initialInput}
@@ -377,17 +381,21 @@ class App extends React.Component<AppProps, State> {
           timeElapsed={this.state.timeElapsed}
           requestIsRunning={this.state.requestIsRunning}
           followOutput={this.state.requestIsRunning && this.state.buildStatus !== ''}
+          theme={this.props.theme}
           onInputChange={this.handleInputChange}
         />
-      </Box>
+      </div>
     );
   }
 }
 
-function WrappedApp(props: Record<string, unknown>) {
-  return (
-    <App {...props} navigate={useNavigate()} />
-  );
+interface WrappedAppProps {
+  theme: ThemeName;
+  onThemeToggle: () => void;
+}
+
+function WrappedApp(props: WrappedAppProps) {
+  return <App {...props} navigate={useNavigate()} />;
 }
 
 export default WrappedApp;

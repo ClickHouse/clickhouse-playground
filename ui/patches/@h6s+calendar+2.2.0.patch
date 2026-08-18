@@ -1,0 +1,25 @@
+diff --git a/node_modules/@h6s/calendar/package.json b/node_modules/@h6s/calendar/package.json
+index 12a7e82..5fd88c2 100644
+--- a/node_modules/@h6s/calendar/package.json
++++ b/node_modules/@h6s/calendar/package.json
+@@ -69,5 +69,19 @@
+     "react-native": {
+       "optional": true
+     }
++  },
++  "module": "dist/index.js",
++  "types": "dist/index.d.ts",
++  "exports": {
++    ".": {
++      "require": {
++        "types": "./dist/index.d.cts",
++        "default": "./dist/index.cjs"
++      },
++      "import": {
++        "types": "./dist/index.d.ts",
++        "default": "./dist/index.js"
++      }
++    }
+   }
+ }
+\ No newline at end of file
