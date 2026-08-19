@@ -26,12 +26,12 @@ Build a Docker image:
 # Address of the backend API
 export API_URL='https://fiddle.clickhouse.com/api/'
 
-docker build --build-arg API_URL="$API_URL" -t lodthe/clickhouse-playground-ui ./ui
+docker build --build-arg API_URL="$API_URL" -t clickhouse/clickhouse-fiddle-ui ./ui
 ```
 
 Run a container based on the built image:
 ```bash
-docker run -d -p 9090:80 lodthe/clickhouse-playground-ui
+docker run -d -p 9090:80 clickhouse/clickhouse-fiddle-ui
 ```
 
 Now the webapp is available on `localhost:9090`.
