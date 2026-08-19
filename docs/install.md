@@ -43,12 +43,12 @@ for guidelines for other distros.
 At first, you should clone this repository and move to 
 the `deploy` directory:
 ```bash
-git clone git@github.com:lodthe/clickhouse-playground.git
+git clone git@github.com:ClickHouse/clickhouse-fiddle.git
 
 # HTTPS version:
-# git clone https://github.com/lodthe/clickhouse-playground.git
+# git clone https://github.com/ClickHouse/clickhouse-fiddle.git
 
-cd clickhouse-playground/deploy
+cd clickhouse-fiddle/deploy
 ls -lah
 ```
 

@@ -85,6 +85,6 @@ Fiddle has a lot of opportunities for improvement:
 - reducing latency by running containers in advance
 - and many many others...
 
-If you want to suggest new improvements or share any other feedback, please create an issue in the[Github repository](https://github.com/lodthe/clickhouse-playground). It's highly appreciated!
+If you want to suggest new improvements or share any other feedback, please create an issue in the [GitHub repository](https://github.com/ClickHouse/clickhouse-fiddle). It's highly appreciated!
 
 And [fiddle.clickhouse.com](https://fiddle.clickhouse.com) is waiting for your queries :)
