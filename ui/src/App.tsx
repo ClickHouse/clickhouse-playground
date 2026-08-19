@@ -23,7 +23,7 @@ INSERT INTO users VALUES (8888, 'Alice', 50);
 SELECT * FROM users;`;
 
 const apiUrl = process.env.REACT_APP_API_URL;
-const githubRepoUrl = 'https://github.com/lodthe/clickhouse-playground';
+const githubRepoUrl = 'https://github.com/ClickHouse/clickhouse-fiddle';
 
 const localStorageFormatKey = 'clickhouse-playground-format';
 
