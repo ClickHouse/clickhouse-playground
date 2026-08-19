@@ -8,6 +8,7 @@ import { autocompletion } from '@codemirror/autocomplete';
 import { ThemeName } from '@clickhouse/click-ui';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { editorChrome, editorTheme } from '../CodeMirrorTheme';
+import clickhouseSqlHighlight from '../sql/highlight';
 
 // CodeMirror's default keymap binds Mod-Enter (Cmd-Enter on macOS, Ctrl-Enter
 // elsewhere) to "insert blank line". Consume it here so the shortcut only
@@ -114,9 +115,12 @@ function EditorPanel({
               autocompletion({
                 icons: false,
               }),
+              // `sql()` stays for keyword autocompletion only: the syntax colors come
+              // from the ClickHouse WASM lexer, like in the ClickHouse Web UI.
               sql({
                 upperCaseKeywords: true,
               }),
+              clickhouseSqlHighlight(),
             ]}
             basicSetup={{
               lineNumbers: true,
