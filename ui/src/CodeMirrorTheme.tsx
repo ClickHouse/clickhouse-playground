@@ -65,7 +65,13 @@ function clickUiEditorTheme(themeName: 'light' | 'dark'): Extension {
       caret: `var(${tokens}-text-default)`,
       gutterBackground: `var(${tokens}-background-default)`,
       gutterForeground: `var(${tokens}-numbers-default)`,
-      fontFamily: 'var(--typography-font-families-mono)',
+      // Not the Click-UI mono stack: its first choice, Inconsolata, is loaded
+      // from Google Fonts as subsets whose unicode-range lacks box drawing
+      // (U+2500..U+259F), so the frames of Pretty* output formats would render
+      // from a metric-incompatible fallback font and misalign. This is the
+      // same stack the ClickHouse Play UI uses; every font in it covers box
+      // drawing.
+      fontFamily: "'DejaVu Sans Mono', 'Liberation Mono', MonoLisa, Consolas, monospace",
       selection: themeName === 'dark' ? '#404859' : '#d5e2f5',
       selectionMatch: themeName === 'dark' ? '#404859' : '#d5e2f5',
       lineHighlight: themeName === 'dark' ? '#31363f' : '#eceef2',
@@ -109,6 +115,13 @@ export const editorChrome = EditorView.theme({
     border: '1px solid var(--click-global-color-stroke-default)',
     'border-radius': 'var(--click-codeblock-radii-all)',
     padding: '3px',
+  },
+  // CodeMirror defaults to line-height 1.4, which leaves gaps between the
+  // vertical lines of box-drawing glyphs on consecutive rows. The fonts above
+  // draw those glyphs to fill exactly their normal line box, so with 'normal'
+  // the frames of Pretty* formats tile seamlessly (as in the Play UI).
+  '.cm-scroller': {
+    lineHeight: 'normal',
   },
   '&.cm-editor.cm-focused': {
     outline: 'none',
