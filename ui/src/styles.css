@@ -1,0 +1,205 @@
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+.app-root {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+  padding: 0 16px;
+}
+
+.app-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  padding: 6px 0;
+  flex-shrink: 0;
+}
+
+.app-header-select-version {
+  flex: 0 1 250px;
+  min-width: 170px;
+}
+
+.app-header-select-build {
+  flex: 0 0 170px;
+}
+
+.app-header-select-format {
+  flex: 0 0 250px;
+}
+
+/* Prefix the closed select trigger with its field name, e.g. "Version: latest".
+   The dropdown list itself keeps showing plain values. */
+.app-header-select-version [class*='select-value-container']::before,
+.app-header-select-build [class*='select-value-container']::before,
+.app-header-select-format [class*='select-value-container']::before {
+  color: var(--click-global-color-text-muted);
+  margin-right: 0.4em;
+  flex-shrink: 0;
+}
+
+.app-header-select-version [class*='select-value-container']::before {
+  content: 'Version:';
+}
+
+.app-header-select-build [class*='select-value-container']::before {
+  content: 'Build:';
+}
+
+.app-header-select-format [class*='select-value-container']::before {
+  content: 'Format:';
+}
+
+.app-header-run {
+  flex: 0 0 auto;
+}
+
+.app-header-status {
+  align-self: center;
+}
+
+.app-header-spacer {
+  flex-grow: 1;
+}
+
+.app-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  align-self: center;
+}
+
+.editor-area {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  overflow: hidden;
+  padding-bottom: 6px;
+}
+
+.resize-handle-horizontal {
+  width: 6px;
+  height: 100%;
+  flex-shrink: 0;
+  margin: 0 3px;
+  border-radius: 3px;
+  background: var(--click-global-color-background-muted);
+  cursor: col-resize;
+}
+
+.resize-handle-vertical {
+  height: 8px;
+  width: 100%;
+  margin: 4px 0;
+  border-radius: 3px;
+  background: var(--click-global-color-background-muted);
+  cursor: row-resize;
+}
+
+.resize-handle-horizontal:hover,
+.resize-handle-vertical:hover {
+  background: var(--click-global-color-stroke-intense);
+}
+
+.time-elapsed {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  padding: 2px 8px;
+  margin: 10px;
+  border-radius: 4px;
+  background: var(--click-global-color-background-muted);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--click-global-color-text-muted);
+  box-shadow: 0 0 2px var(--click-global-color-shadow-default);
+  z-index: 10;
+}
+
+.cm-editor-container .cm-editor {
+  height: 100% !important;
+  width: 100% !important;
+  flex-grow: 1;
+}
+
+.cm-editor-container .cm-scroller {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.cm-editor-container .cm-content {
+  width: 100% !important;
+  min-height: 100%;
+}
+
+/* Between one-row and stacked layouts, let the header wrap freely but keep
+   the version select from growing past its share of the row. */
+@media (max-width: 980px) {
+  .app-header-select-version {
+    flex-basis: 220px;
+  }
+}
+
+/* Narrow screens: stack the header into tidy full-width rows.
+   Row 1: Run query stretched + the icon actions.
+   Row 2: Version. Row 3: Build and Format side by side. */
+@media (max-width: 600px) {
+  .app-root {
+    padding: 0 8px;
+  }
+
+  .app-header {
+    gap: 8px;
+  }
+
+  .app-header-run {
+    order: 0;
+    flex: 1 1 auto;
+  }
+
+  .app-header-run button {
+    width: 100%;
+  }
+
+  .app-header-actions {
+    order: 1;
+  }
+
+  .app-header-spacer {
+    display: none;
+  }
+
+  .app-header-select-version {
+    order: 2;
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+
+  .app-header-select-build {
+    order: 3;
+    flex: 1 1 40%;
+    min-width: 0;
+  }
+
+  .app-header-select-format {
+    order: 4;
+    flex: 1 1 40%;
+    min-width: 0;
+  }
+
+  .app-header-status {
+    order: 5;
+    flex: 1 1 100%;
+  }
+}

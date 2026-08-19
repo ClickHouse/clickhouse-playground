@@ -1,74 +1,112 @@
-// This file is a patched version of the XCode theme:
-// https://github.com/uiwjs/react-codemirror/blob/master/themes/xcode/src/index.ts
+// CodeMirror themes for the SQL editor and the output pane, matching the
+// Click-UI design system.
+//
+// The syntax palette mirrors the Click-UI CodeBlock component
+// (@clickhouse/click-ui, components/CodeBlock/useColorStyle.ts), which keeps
+// the editor consistent with code rendering in ClickHouse products. The
+// editor chrome (background, gutter, borders, autocomplete tooltip) is driven
+// by Click-UI CSS variables.
 
-/**
- * @name Xcode
- */
 import { tags as t } from '@lezer/highlight';
-import { createTheme, CreateThemeOptions } from '@uiw/codemirror-themes';
+import { createTheme } from '@uiw/codemirror-themes';
 import { EditorView } from '@codemirror/view';
+import { Extension } from '@codemirror/state';
 
-export const defaultSettingsXcodeLight: CreateThemeOptions['settings'] = {
-  background: '#fff',
-  foreground: '#3D3D3D',
-  selection: '#BBDFFF',
-  selectionMatch: '#BBDFFF',
-  gutterBackground: '#fff',
-  gutterForeground: '#AFAFAF',
-  lineHighlight: '#EDF4FF',
+type SyntaxPalette = {
+  comment: string;
+  keyword: string;
+  attribute: string;
+  type: string;
+  string: string;
+  punctuation: string;
 };
 
-export function xcodeLightInit(options?: Partial<CreateThemeOptions>) {
-  const { theme = 'light', settings = {}, styles = [] } = options || {};
+// Hex values copied from Click-UI's CodeBlock highlighting (useColorStyle).
+const lightPalette: SyntaxPalette = {
+  comment: '#656e77',
+  keyword: '#015692',
+  attribute: '#803378',
+  type: '#b75501',
+  string: '#54790d',
+  punctuation: '#535a60',
+};
+
+const darkPalette: SyntaxPalette = {
+  comment: '#999999',
+  keyword: '#88aece',
+  attribute: '#c59bc1',
+  type: '#f08d49',
+  string: '#b5bd68',
+  punctuation: '#cccccc',
+};
+
+function clickUiEditorTheme(themeName: 'light' | 'dark'): Extension {
+  const palette = themeName === 'dark' ? darkPalette : lightPalette;
+  // Chrome colors come from the Click-UI codeblock tokens; both mode variants
+  // are defined in every theme, so we pick the one matching the app theme.
+  const tokens = `--click-codeblock-${themeName}Mode-color`;
+
   return createTheme({
-    theme,
+    theme: themeName,
     settings: {
-      ...defaultSettingsXcodeLight,
-      ...settings,
+      background: `var(${tokens}-background-default)`,
+      foreground: `var(${tokens}-text-default)`,
+      caret: `var(${tokens}-text-default)`,
+      gutterBackground: `var(${tokens}-background-default)`,
+      gutterForeground: `var(${tokens}-numbers-default)`,
+      fontFamily: 'var(--typography-font-families-mono)',
+      selection: themeName === 'dark' ? '#404859' : '#d5e2f5',
+      selectionMatch: themeName === 'dark' ? '#404859' : '#d5e2f5',
+      lineHighlight: themeName === 'dark' ? '#31363f' : '#eceef2',
     },
     styles: [
-      { tag: [t.comment, t.quote], color: '#707F8D' },
-      { tag: [t.typeName, t.typeOperator], color: '#aa0d91' },
-      { tag: [t.keyword], color: '#aa0d91', fontWeight: 'bold' },
-      { tag: [t.string, t.meta], color: '#D23423' },
-      { tag: [t.name], color: '#032f62' },
-      { tag: [t.typeName], color: '#522BB2' },
-      { tag: [t.variableName], color: '#23575C' },
-      { tag: [t.definition(t.variableName)], color: '#327A9E' },
-      { tag: [t.regexp, t.link], color: '#0e0eff' },
-      ...styles,
+      { tag: [t.comment, t.quote], color: palette.comment },
+      { tag: [t.keyword, t.meta, t.operatorKeyword], color: palette.keyword, fontWeight: 'bold' },
+      { tag: [t.attributeName, t.namespace], color: palette.attribute },
+      {
+        tag: [t.typeName, t.typeOperator, t.number, t.bool, t.standard(t.name)],
+        color: palette.type,
+      },
+      { tag: [t.string, t.special(t.string), t.regexp, t.link], color: palette.string },
+      { tag: [t.punctuation, t.operator], color: palette.punctuation },
     ],
   });
 }
 
-export const xcodeLight = xcodeLightInit();
+export const clickUiLight = clickUiEditorTheme('light');
+export const clickUiDark = clickUiEditorTheme('dark');
 
-export const xcodeLightPatch = EditorView.theme({
+// Borders and the autocomplete tooltip are driven by Click-UI CSS variables,
+// so a single extension works for both the light and the dark themes.
+export const editorChrome = EditorView.theme({
   '&': {
     fontSize: '12pt',
-    border: '1px solid #556cd6',
-    'border-radius': '3px',
+    border: '1px solid var(--click-global-color-stroke-default)',
+    'border-radius': 'var(--click-codeblock-radii-all)',
     padding: '3px',
   },
   '&.cm-editor.cm-focused': {
     outline: 'none',
-    'border-width': '2px',
-    'border-color': '#fcd004',
+    'border-color': 'var(--click-global-color-accent-default)',
   },
   '.cm-tooltip-autocomplete': {
-    border: '1px solid #556cd6',
-    'border-radius': '3px',
+    border: '1px solid var(--click-global-color-stroke-default)',
+    'border-radius': 'var(--click-codeblock-radii-all)',
     margin: '3px',
     padding: '3px',
-    background: 'white',
-    color: 'black',
+    background: 'var(--click-global-color-background-default)',
+    color: 'var(--click-global-color-text-default)',
   },
   '.cm-completionMatchedText': {
     'text-decoration': 'none',
   },
   '.cm-tooltip-autocomplete ul li[aria-selected]': {
-    background: 'white',
-    color: 'black',
+    background: 'var(--click-global-color-background-muted)',
+    color: 'var(--click-global-color-text-default)',
     'font-weight': 'bold',
   },
 });
+
+export function editorTheme(themeName: 'light' | 'dark'): Extension {
+  return themeName === 'dark' ? clickUiDark : clickUiLight;
+}

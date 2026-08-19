@@ -30,6 +30,7 @@
     "react/jsx-filename-extension": [1, { "extensions": [".tsx", ".ts"] }],
     "react/jsx-props-no-spreading": "off",
     "react/destructuring-assignment": "off",
+    "react/require-default-props": "off",
     "@typescript-eslint/indent": ["error", 2],
     "@typescript-eslint/no-unused-vars": "error",
     "@typescript-eslint/no-explicit-any": "error",
