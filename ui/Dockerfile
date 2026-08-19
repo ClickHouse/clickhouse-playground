@@ -6,6 +6,8 @@ WORKDIR /app
 
 COPY package.json /app/package.json
 COPY package-lock.json /app/package-lock.json
+# patches/ must be present before `npm ci`: the postinstall hook runs patch-package
+COPY patches /app/patches
 
 RUN npm ci
 
