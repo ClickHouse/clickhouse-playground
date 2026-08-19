@@ -95,7 +95,11 @@ class App extends React.Component<AppProps, State> {
       this.setState({ selectedFormat: savedFormat });
     }
 
+    // Fallback for an unfocused editor; the editor keymap consumes the shortcut via preventDefault.
     window.addEventListener('keydown', (e: KeyboardEvent) => {
+      if (e.defaultPrevented) {
+        return;
+      }
       if (e.metaKey && e.key === 'Enter') {
         this.runQuery();
       }
@@ -261,6 +265,10 @@ class App extends React.Component<AppProps, State> {
   /* eslint-enable no-await-in-loop */
 
   private runQuery = async () => {
+    if (this.state.requestIsRunning) {
+      return;
+    }
+
     const {
       input, selectedFormat,
     } = this.state;
@@ -378,6 +386,7 @@ class App extends React.Component<AppProps, State> {
           requestIsRunning={this.state.requestIsRunning}
           followOutput={this.state.requestIsRunning && this.state.buildStatus !== ''}
           onInputChange={this.handleInputChange}
+          onRun={this.runQuery}
         />
       </Box>
     );

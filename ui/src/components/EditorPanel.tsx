@@ -1,8 +1,8 @@
 import * as React from 'react';
-import { useEffect, useRef } from 'react';
-import CodeMirror, { ReactCodeMirrorRef } from '@uiw/react-codemirror';
+import { useEffect, useMemo, useRef } from 'react';
+import CodeMirror, { Prec, ReactCodeMirrorRef } from '@uiw/react-codemirror';
 import { sql } from '@codemirror/lang-sql';
-import { EditorView } from '@codemirror/view';
+import { EditorView, keymap } from '@codemirror/view';
 import { autocompletion } from '@codemirror/autocomplete';
 import Box from '@mui/material/Box';
 import { useTheme } from '@mui/material/styles';
@@ -21,6 +21,7 @@ interface EditorPanelProps {
   requestIsRunning: boolean;
   followOutput: boolean;
   onInputChange: (value: string) => void;
+  onRun: () => void;
 }
 
 function EditorPanel({
@@ -30,11 +31,17 @@ function EditorPanel({
   requestIsRunning,
   followOutput,
   onInputChange,
+  onRun,
 }: EditorPanelProps) {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
   const panelDirection = isMobile ? 'vertical' : 'horizontal';
+
+  // Prec.highest overrides the default Cmd-Enter binding (insertBlankLine).
+  const runKeymap = useMemo(() => Prec.highest(keymap.of([
+    { mac: 'Cmd-Enter', run: () => { onRun(); return true; } },
+  ])), [onRun]);
 
   // While streaming build logs, keep the output scrolled to the latest line.
   const outputRef = useRef<ReactCodeMirrorRef>(null);
@@ -145,6 +152,7 @@ function EditorPanel({
             className="cm-editor-container"
             editable={!requestIsRunning}
             extensions={[
+              runKeymap,
               xcodeLightPatch,
               EditorView.lineWrapping,
               autocompletion({
