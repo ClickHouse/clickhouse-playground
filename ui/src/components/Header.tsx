@@ -26,11 +26,13 @@ interface HeaderProps {
   isFormatSelectionDisabled: boolean;
   githubRepoUrl: string;
   theme: ThemeName;
+  showHexViewer: boolean;
   onVersionChange: (newValue: string) => void;
   onBuildTypeChange: (newValue: string) => void;
   onFormatChange: (newValue: string) => void;
   onRunClick: (event: React.FormEvent) => void;
   onThemeToggle: () => void;
+  onHexViewerToggle: () => void;
 }
 
 function Header({
@@ -46,11 +48,13 @@ function Header({
   isFormatSelectionDisabled,
   githubRepoUrl,
   theme,
+  showHexViewer,
   onVersionChange,
   onBuildTypeChange,
   onFormatChange,
   onRunClick,
   onThemeToggle,
+  onHexViewerToggle,
 }: HeaderProps) {
   return (
     <header className="app-header">
@@ -104,6 +108,13 @@ function Header({
       <div className="app-header-spacer" />
 
       <div className="app-header-actions">
+        <IconButton
+          type={showHexViewer ? 'primary' : 'ghost'}
+          icon="code"
+          aria-pressed={showHexViewer}
+          title={showHexViewer ? 'Hide hexadecimal output' : 'Show hexadecimal output'}
+          onClick={onHexViewerToggle}
+        />
         <IconButton
           type="ghost"
           icon={theme === 'light' ? 'moon' : 'light-bulb-on'}

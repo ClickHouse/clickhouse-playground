@@ -1,9 +1,11 @@
 package restapi
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -47,8 +49,9 @@ func (h *queryHandler) handle(r chi.Router) {
 }
 
 type RunQueryInput struct {
-	Query   string `json:"query"`
-	Version string `json:"version"`
+	Query            string `json:"query"`
+	Version          string `json:"version"`
+	IncludeRawOutput bool   `json:"include_raw_output"`
 	// BuildType is the ClickHouse build kind: "release" (default), "debug", "asan", etc.
 	BuildType string      `json:"build_type"`
 	Database  string      `json:"database"`
@@ -64,9 +67,10 @@ type ClickHouseSettings struct {
 }
 
 type RunQueryOutput struct {
-	QueryRunID  string `json:"query_run_id"`
-	Output      string `json:"output"`
-	TimeElapsed string `json:"time_elapsed"`
+	QueryRunID   string `json:"query_run_id"`
+	Output       string `json:"output"`
+	OutputBase64 string `json:"output_base64,omitempty"`
+	TimeElapsed  string `json:"time_elapsed"`
 }
 
 func convertSettings(req *RunQueryInput) (runsettings.RunSettings, error) {
@@ -163,6 +167,7 @@ func (h *queryHandler) runQuery(w http.ResponseWriter, r *http.Request) {
 
 	timeElapsed := time.Since(startedAt)
 	run.Output = output
+	run.RawOutput = []byte(output)
 	run.ExecutionTime = timeElapsed
 
 	err = h.runRepo.Create(run)
@@ -175,11 +180,15 @@ func (h *queryHandler) runQuery(w http.ResponseWriter, r *http.Request) {
 
 	zlog.Info().Str("id", run.ID).Dur("elapsed", timeElapsed).Msg("saved a new run")
 
-	writeResult(w, RunQueryOutput{
+	result := RunQueryOutput{
 		QueryRunID:  run.ID,
 		Output:      run.Output,
 		TimeElapsed: timeElapsed.Round(time.Millisecond).String(),
-	})
+	}
+	if req.IncludeRawOutput {
+		result.OutputBase64 = encodeOutput(run.RawOutput)
+	}
+	writeResult(w, result)
 }
 
 type GetQueryRunInput struct {
@@ -187,13 +196,33 @@ type GetQueryRunInput struct {
 }
 
 type GetQueryRunOutput struct {
-	QueryRunID string                  `json:"query_run_id"`
-	Database   string                  `json:"database,omitempty"`
-	Version    string                  `json:"version"`
-	BuildType  string                  `json:"build_type,omitempty"`
-	Settings   runsettings.RunSettings `json:"settings,omitempty"`
-	Input      string                  `json:"input"`
-	Output     string                  `json:"output"`
+	QueryRunID   string                  `json:"query_run_id"`
+	Database     string                  `json:"database,omitempty"`
+	Version      string                  `json:"version"`
+	BuildType    string                  `json:"build_type,omitempty"`
+	Settings     runsettings.RunSettings `json:"settings,omitempty"`
+	Input        string                  `json:"input"`
+	Output       string                  `json:"output"`
+	OutputBase64 string                  `json:"output_base64,omitempty"`
+}
+
+func encodeOutput(output []byte) string {
+	return base64.StdEncoding.EncodeToString(output)
+}
+
+func rawOutput(run *queryrun.Run) []byte {
+	if run.RawOutput != nil {
+		return run.RawOutput
+	}
+
+	// Records written before RawOutput was introduced have only the legacy
+	// string field. Its bytes are the best available representation.
+	return []byte(run.Output)
+}
+
+func includeRawOutput(r *http.Request) bool {
+	include, err := strconv.ParseBool(r.URL.Query().Get("include_raw_output"))
+	return err == nil && include
 }
 
 func (h *queryHandler) getQueryRun(w http.ResponseWriter, r *http.Request) {
@@ -215,7 +244,7 @@ func (h *queryHandler) getQueryRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeResult(w, GetQueryRunOutput{
+	result := GetQueryRunOutput{
 		QueryRunID: run.ID,
 		Database:   run.Database,
 		Version:    run.Version,
@@ -223,5 +252,9 @@ func (h *queryHandler) getQueryRun(w http.ResponseWriter, r *http.Request) {
 		Settings:   run.Settings,
 		Input:      run.Input,
 		Output:     run.Output,
-	})
+	}
+	if includeRawOutput(r) {
+		result.OutputBase64 = encodeOutput(rawOutput(run))
+	}
+	writeResult(w, result)
 }
