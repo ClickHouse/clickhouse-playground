@@ -2,13 +2,14 @@ import * as React from 'react';
 import { useEffect, useRef, useState } from 'react';
 import CodeMirror, { ReactCodeMirrorRef } from '@uiw/react-codemirror';
 import { sql } from '@codemirror/lang-sql';
-import { EditorView, keymap } from '@codemirror/view';
-import { Prec } from '@codemirror/state';
+import { Decoration, EditorView, keymap } from '@codemirror/view';
+import { Extension, Prec } from '@codemirror/state';
 import { autocompletion } from '@codemirror/autocomplete';
 import { ThemeName } from '@clickhouse/click-ui';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { editorChrome, editorTheme } from '../CodeMirrorTheme';
 import clickhouseSqlHighlight from '../sql/highlight';
+import HexViewer, { OutputRange } from './HexViewer';
 
 // CodeMirror's default keymap binds Mod-Enter (Cmd-Enter on macOS, Ctrl-Enter
 // elsewhere) to "insert blank line". Consume it here so the shortcut only
@@ -35,9 +36,11 @@ function useIsMobile(): boolean {
 interface EditorPanelProps {
   initialInput: string;
   output: string;
+  rawOutput: Uint8Array | undefined;
   timeElapsed: string | undefined;
   requestIsRunning: boolean;
   followOutput: boolean;
+  showHexViewer: boolean;
   theme: ThemeName;
   onInputChange: (value: string) => void;
 }
@@ -45,13 +48,16 @@ interface EditorPanelProps {
 function EditorPanel({
   initialInput,
   output,
+  rawOutput,
   timeElapsed,
   requestIsRunning,
   followOutput,
+  showHexViewer,
   theme,
   onInputChange,
 }: EditorPanelProps) {
   const isMobile = useIsMobile();
+  const [highlightedOutputRanges, setHighlightedOutputRanges] = useState<OutputRange[]>([]);
 
   const panelDirection = isMobile ? 'vertical' : 'horizontal';
   const codeMirrorTheme = editorTheme(theme);
@@ -67,6 +73,37 @@ function EditorPanel({
       view.scrollDOM.scrollTop = view.scrollDOM.scrollHeight;
     }
   }, [output, followOutput]);
+
+  // Each range marks the full source character for a hovered or pinned UTF-8
+  // sequence. Sort the decorations because CodeMirror requires document order.
+  const outputHighlight = React.useMemo<Extension>(() => {
+    if (highlightedOutputRanges.length === 0) {
+      return [];
+    }
+
+    const sortedRanges = highlightedOutputRanges
+      .filter((range, index, ranges) => ranges.findIndex(
+        (candidate) => candidate.from === range.from && candidate.to === range.to,
+      ) === index)
+      .sort((left, right) => left.from - right.from || left.to - right.to);
+    const mergedRanges: OutputRange[] = [];
+    sortedRanges.forEach((range) => {
+      const previous = mergedRanges[mergedRanges.length - 1];
+      if (previous && range.from <= previous.to) {
+        previous.to = Math.max(previous.to, range.to);
+      } else {
+        mergedRanges.push({ ...range });
+      }
+    });
+
+    return EditorView.decorations.of(Decoration.set(mergedRanges.map((range) => (
+      Decoration.mark({ class: 'output-hex-highlight' }).range(range.from, range.to)
+    ))));
+  }, [highlightedOutputRanges]);
+
+  useEffect(() => {
+    setHighlightedOutputRanges([]);
+  }, [output, showHexViewer]);
 
   const panelStyle: React.CSSProperties = {
     overflow: 'hidden',
@@ -86,6 +123,27 @@ function EditorPanel({
     display: 'flex',
     flexDirection: 'column',
   };
+
+  const outputEditor = (
+    <CodeMirror
+      ref={outputRef}
+      theme={codeMirrorTheme}
+      value={output}
+      basicSetup={{
+        lineNumbers: false,
+        foldGutter: false,
+        dropCursor: true,
+        indentOnInput: false,
+        highlightActiveLine: false,
+      }}
+      style={codeMirrorStyle}
+      className="cm-editor-container"
+      extensions={[editorChrome, EditorView.lineWrapping, outputHighlight]}
+      readOnly
+    />
+  );
+
+  const outputPaneStyle: React.CSSProperties = { ...panelStyle, position: 'relative' };
 
   return (
     <div className="editor-area">
@@ -133,24 +191,28 @@ function EditorPanel({
           />
         </Panel>
         <PanelResizeHandle className={isMobile ? 'resize-handle-vertical' : 'resize-handle-horizontal'} />
-        <Panel defaultSize={isMobile ? 60 : 50} minSize={20} style={{ ...panelStyle, position: 'relative' }}>
-          <CodeMirror
-            ref={outputRef}
-            theme={codeMirrorTheme}
-            value={output}
-            basicSetup={{
-              lineNumbers: false,
-              foldGutter: false,
-              dropCursor: true,
-              indentOnInput: false,
-              highlightActiveLine: false,
-            }}
-            style={codeMirrorStyle}
-            className="cm-editor-container"
-            extensions={[editorChrome, EditorView.lineWrapping]}
-            readOnly
-          />
-          {timeElapsed && <div className="time-elapsed">{timeElapsed}</div>}
+        <Panel defaultSize={isMobile ? 60 : 50} minSize={20} style={panelStyle}>
+          {showHexViewer ? (
+            <PanelGroup direction="vertical" style={{ height: '100%', minHeight: 0 }}>
+              <Panel defaultSize={65} minSize={20} style={outputPaneStyle}>
+                {outputEditor}
+                {timeElapsed && <div className="time-elapsed">{timeElapsed}</div>}
+              </Panel>
+              <PanelResizeHandle className="resize-handle-vertical" />
+              <Panel defaultSize={35} minSize={15} style={panelStyle}>
+                <HexViewer
+                  output={output}
+                  rawOutput={rawOutput}
+                  onHighlightRanges={setHighlightedOutputRanges}
+                />
+              </Panel>
+            </PanelGroup>
+          ) : (
+            <div style={outputPaneStyle}>
+              {outputEditor}
+              {timeElapsed && <div className="time-elapsed">{timeElapsed}</div>}
+            </div>
+          )}
         </Panel>
       </PanelGroup>
     </div>

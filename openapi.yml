@@ -191,6 +191,12 @@ paths:
           schema:
             type: string
             format: uuid
+        - name: include_raw_output
+          in: query
+          description: Include the exact output bytes as Base64 in output_base64.
+          required: false
+          schema:
+            type: boolean
       responses:
         "200":
           description: Successful operation
@@ -347,6 +353,9 @@ components:
                 output_format:
                   type: string
                   description: Output format for ClickHouse query results
+        include_raw_output:
+          type: boolean
+          description: Request exact output bytes as Base64 in output_base64.
       required:
         - query
         - version
@@ -364,6 +373,10 @@ components:
             output:
               type: string
               description: Query execution output
+            output_base64:
+              type: string
+              format: byte
+              description: Exact query output bytes, present when include_raw_output is true
             time_elapsed:
               type: string
               description: Time taken to execute the query
@@ -408,6 +421,10 @@ components:
             output:
               type: string
               description: Query execution output
+            output_base64:
+              type: string
+              format: byte
+              description: Exact query output bytes, present when include_raw_output is true
           required:
             - query_run_id
             - version

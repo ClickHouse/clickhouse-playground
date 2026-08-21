@@ -46,7 +46,9 @@ type State = {
   buildStatus: string;
   buildElapsedSec: number;
   output: string;
+  rawOutput: Uint8Array | undefined;
   timeElapsed?: string;
+  showHexViewer: boolean;
 };
 
 interface AppProps {
@@ -83,7 +85,9 @@ class App extends React.Component<AppProps, State> {
       buildStatus: '',
       buildElapsedSec: 0,
       output: '',
+      rawOutput: undefined,
       timeElapsed: undefined,
+      showHexViewer: false,
     };
   }
 
@@ -176,6 +180,10 @@ class App extends React.Component<AppProps, State> {
     });
   };
 
+  private handleHexViewerToggle = () => {
+    this.setState((previous) => ({ showHexViewer: !previous.showHexViewer }));
+  };
+
   private handleSelectedVersionChange = (newValue: string) => {
     this.setState({
       selectedVersion: newValue,
@@ -213,6 +221,7 @@ class App extends React.Component<AppProps, State> {
           input: result.input,
           initialInput: result.input,
           output: result.output,
+          rawOutput: result.outputBytes,
           selectedVersion: result.version,
           selectedBuildType: result.buildType,
         });
@@ -222,6 +231,7 @@ class App extends React.Component<AppProps, State> {
         this.setState({
           input: '',
           output: error.message,
+          rawOutput: undefined,
         });
       })
       .finally(() => this.setState({
@@ -244,6 +254,7 @@ class App extends React.Component<AppProps, State> {
           status.logs
           || `Preparing the ${buildType} build for ${version}…\n`
             + 'The first run builds the image from CI artifacts and can take several minutes.',
+        rawOutput: undefined,
       });
     };
 
@@ -260,6 +271,7 @@ class App extends React.Component<AppProps, State> {
       const header = `Failed to build the ${buildType} image for ${version}: ${status.error || 'unknown error'}`;
       this.setState({
         output: status.logs ? `${header}\n\n--- build log ---\n${status.logs}` : header,
+        rawOutput: undefined,
       });
       return false;
     }
@@ -282,6 +294,7 @@ class App extends React.Component<AppProps, State> {
     this.setState({
       requestIsRunning: true,
       output: '',
+      rawOutput: undefined,
       buildStatus: '',
       timeElapsed: undefined,
     });
@@ -293,6 +306,7 @@ class App extends React.Component<AppProps, State> {
           output:
             `Preparing the ${selectedBuildType} build for ${selectedVersion}.\n`
             + 'The first run builds the image from CI artifacts and can take several minutes…',
+          rawOutput: undefined,
         });
 
         this.startBuildTimer();
@@ -302,7 +316,7 @@ class App extends React.Component<AppProps, State> {
         }
 
         // Keep the timer running through container start + query execution.
-        this.setState({ buildStatus: 'Running query', output: '' });
+        this.setState({ buildStatus: 'Running query', output: '', rawOutput: undefined });
       }
 
       const result: RunQueryResponse = await this.client.runQuery(
@@ -314,6 +328,7 @@ class App extends React.Component<AppProps, State> {
 
       this.setState({
         output: result.output,
+        rawOutput: result.outputBytes,
         timeElapsed: result.timeElapsed,
       });
 
@@ -325,6 +340,7 @@ class App extends React.Component<AppProps, State> {
       console.log(error);
       this.setState({
         output: (error as Error).message,
+        rawOutput: undefined,
       });
     } finally {
       this.stopBuildTimer();
@@ -369,19 +385,23 @@ class App extends React.Component<AppProps, State> {
           isFormatSelectionDisabled={formatDisabled}
           githubRepoUrl={githubRepoUrl}
           theme={this.props.theme}
+          showHexViewer={this.state.showHexViewer}
           onVersionChange={this.handleSelectedVersionChange}
           onBuildTypeChange={this.handleSelectedBuildTypeChange}
           onFormatChange={this.handleSelectedFormatChange}
           onRunClick={this.handleRunButtonClick}
           onThemeToggle={this.props.onThemeToggle}
+          onHexViewerToggle={this.handleHexViewerToggle}
         />
         <EditorPanel
           initialInput={this.state.initialInput}
           output={this.state.output}
+          rawOutput={this.state.rawOutput}
           timeElapsed={this.state.timeElapsed}
           requestIsRunning={this.state.requestIsRunning}
           followOutput={this.state.requestIsRunning && this.state.buildStatus !== ''}
           theme={this.props.theme}
+          showHexViewer={this.state.showHexViewer}
           onInputChange={this.handleInputChange}
         />
       </div>

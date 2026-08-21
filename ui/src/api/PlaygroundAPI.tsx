@@ -21,16 +21,41 @@ export type GetQueryRunResponse = {
   buildType: string;
   input: string;
   output: string;
+  outputBytes: Uint8Array;
   queryRunId: string;
 };
 
 export type RunQueryResponse = {
   queryRunId: string;
   output: string;
+  outputBytes: Uint8Array;
   timeElapsed: string;
 };
 
 export const RELEASE_BUILD_TYPE = 'release';
+
+function textToBytes(text: string): Uint8Array {
+  return new TextEncoder().encode(text);
+}
+
+// Older API deployments do not recognize include_raw_output. They return the
+// legacy text field, which is still a useful UTF-8 fallback for the hex view.
+function decodeOutputBytes(output: string, outputBase64: unknown): Uint8Array {
+  if (typeof outputBase64 !== 'string') {
+    return textToBytes(output);
+  }
+
+  try {
+    const binary = window.atob(outputBase64);
+    const bytes = new Uint8Array(binary.length);
+    for (let index = 0; index < binary.length; index += 1) {
+      bytes[index] = binary.charCodeAt(index);
+    }
+    return bytes;
+  } catch {
+    return textToBytes(output);
+  }
+}
 
 export class Client {
   apiBaseUrl: string;
@@ -146,6 +171,7 @@ export class Client {
         query,
         version,
         build_type: buildType,
+        include_raw_output: true,
         settings: {
           clickhouse: {
             output_format: format,
@@ -161,6 +187,7 @@ export class Client {
           return {
             queryRunId: response.result.query_run_id,
             output: response.result.output,
+            outputBytes: decodeOutputBytes(response.result.output, response.result.output_base64),
             timeElapsed: response.result.time_elapsed,
           };
         }
@@ -172,7 +199,7 @@ export class Client {
   }
 
   public getQueryRun(id: string): Promise<GetQueryRunResponse> {
-    return fetch(`${this.apiBaseUrl}runs/${id}`)
+    return fetch(`${this.apiBaseUrl}runs/${id}?include_raw_output=true`)
       .then((response) => response.json())
       .then((response) => {
         if (response.result) {
@@ -181,6 +208,7 @@ export class Client {
             buildType: response.result.build_type || RELEASE_BUILD_TYPE,
             input: response.result.input,
             output: response.result.output,
+            outputBytes: decodeOutputBytes(response.result.output, response.result.output_base64),
             queryRunId: response.result.query_run_id,
           };
         }
